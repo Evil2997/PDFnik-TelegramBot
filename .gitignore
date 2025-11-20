@@ -1,0 +1,6 @@
+.env
+
+/images
+/images/**
+
+ROAD_MAP.md

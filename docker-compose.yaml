@@ -1,0 +1,59 @@
+services:
+  rabbitmq:
+    image: rabbitmq:4.1.5-management
+    container_name: rabbitmq
+    hostname: rabbitmq
+    ports:
+      - "15672:15672" # UI
+      - "5672:5672"   # AMQP
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - shared
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    hostname: pdfbot_redis
+    command: [ "redis-server", "--save", "60", "1", "--loglevel", "warning" ]
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - shared
+
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: telegram-bot
+    env_file:
+      - .env
+    depends_on:
+      - rabbitmq
+      - redis
+    restart: unless-stopped
+    networks:
+      - shared
+
+volumes:
+  redis_data:
+
+networks:
+  shared:
+    name: shared-net
+    # ВАЖНО: нет external → сеть будет создана этим compose
+
+
+# Подключаемся и не контролируем сеть, мы в ней гость.
+#networks:
+#  default:
+#    external: true
+#    name: shared-net
