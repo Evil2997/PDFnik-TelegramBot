@@ -9,8 +9,8 @@ class TextItem(BaseModel):
 
 class ImageItem(BaseModel):
     type: Literal["image"]
-    filename: str
-    content_b64: str
+    filename: str         # имя файла для пользователя (может быть оригинальным)
+    storage_key: str      # "images/2025/11/20/uuid.jpg"
 
 
 Item = Union[TextItem, ImageItem]
@@ -23,8 +23,8 @@ class PdfOrder(BaseModel):
 
 class BotDocument(BaseModel):
     chat_id: int
-    filename: str
-    pdf_b64: str
+    filename: str         # имя PDF для пользователя
+    storage_key: str      # "pdf/2025/11/20/uuid.pdf"
 
 # TODO-SHARED-MODELS-001: временная копия контрактов.
-# После вынесения в общий пакет pdfnik-contracts удалить и использовать импорт.
+# Позже вынести в общий пакет и переиспользовать и в боте, и в pdf-сервисе.
