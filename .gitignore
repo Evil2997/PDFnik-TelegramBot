@@ -1,6 +1,5 @@
 .env
 
-/images
-/images/**
+.idea
 
 ROAD_MAP.md

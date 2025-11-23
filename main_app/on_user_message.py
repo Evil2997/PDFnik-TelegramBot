@@ -38,7 +38,7 @@ async def on_user_message(msg: Message):
                 "chat_id": chat_id,
                 "items": items,  # весь накопленный список (уже без base64, только storage_key)
             },
-            queue="orders",
+            queue="pdf.generate",
         )
 
         await redis.delete(key)
