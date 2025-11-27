@@ -1,9 +1,9 @@
-from main_app.contracts import BotDocument
+from main_app.domain.contracts import BotDocument
 from aiogram.types import BufferedInputFile
-from main_app.main_constants import broker, bot, storage
+from main_app.core.constants import broker, bot, storage
 
 @broker.subscriber("pdf.send")
-async def send_pdf(data: dict):
+async def pdf_consumer(data: dict):
     doc_model = BotDocument.model_validate(data)
 
     pdf_bytes = await storage.read_bytes(doc_model.storage_key)

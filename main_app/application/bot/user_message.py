@@ -3,13 +3,13 @@ from io import BytesIO
 
 from aiogram.types import Message
 
-from main_app.contracts import TextItem, ImageItem
-from main_app.main_constants import broker, dp, bot, redis, storage
-from main_app.utils import build_stats_message
+from main_app.domain.contracts import TextItem, ImageItem
+from main_app.core.constants import broker, dp, bot, redis, storage
+from main_app.domain.build_stats_message import build_stats_message
 
 
 @dp.message()
-async def on_user_message(msg: Message):
+async def user_message(msg: Message):
     chat_id = msg.chat.id
     key = f"pdf_session:{chat_id}"
 

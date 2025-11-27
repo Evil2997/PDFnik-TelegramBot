@@ -1,8 +1,8 @@
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from main_app.main_constants import dp
-from main_app.text import START_TEXT, HELP_TEXT
+from main_app.core.constants import dp
+from main_app.application.bot.commands_text import START_TEXT, HELP_TEXT
 
 
 @dp.message(Command("start"))

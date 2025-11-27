@@ -3,8 +3,8 @@ import logging
 
 import sys
 
-from main_app.main_constants import broker, dp, bot
-from main_app import commands, on_user_message, send_pdf  # noqa: F401
+from main_app.core.constants import broker, dp, bot
+
 
 async def main():
     async with broker:

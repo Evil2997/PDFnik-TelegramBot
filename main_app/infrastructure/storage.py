@@ -14,6 +14,7 @@ class StoredFile(BaseModel):
     filename    — имя файла для пользователя (оригинальное),
     size        — размер в байтах (по желанию).
     """
+
     storage_key: str
     filename: str
     content_type: Optional[str] = None
@@ -22,38 +23,38 @@ class StoredFile(BaseModel):
 
 class LocalFileStorage:
     """
-    Локальное хранилище, которое ведёт себя как S3:
-    мы работаем только с storage_key, а внутри оно маппится на путь на диске.
-
+    Простое файловое хранилище S3-подобного вида.
     TODO: заменить на S3FileStorage, когда появится реальный S3-бакет.
+    root — корневая директория, внутри которой будут создаваться подпапки.
     """
 
-    def __init__(self, root: pathlib.Path):
+    def __init__(self, root: pathlib.Path) -> None:
         self.root = root
+        self.root.mkdir(parents=True, exist_ok=True)
 
     async def save_bytes(
         self,
         data: bytes,
         *,
-        prefix: str,          # "images" / "pdf"
-        filename: str,        # оригинальное имя, для пользователя
+        prefix: str,                # "images" / "pdf"
+        filename: str,              # оригинальное имя, для пользователя
         content_type: str | None = None,
     ) -> StoredFile:
-        # Дата для шардинга
-        today = dt.datetime.utcnow()
+        # Дата для шардинга (timezone-aware datetime в UTC)
+        today = dt.datetime.now(dt.UTC)
         date_prefix = today.strftime("%Y/%m/%d")
 
         ext = pathlib.Path(filename).suffix  # .jpg, .png, .pdf
         if not ext:
-            raise FileExistsError()
+            raise ValueError("Filename must have an extension")
 
         # Уникальное имя файла внутри хранилища
         unique_name = f"{uuid.uuid4().hex}{ext}"
 
-        storage_key = f"{prefix}/{date_prefix}/{unique_name}"
+        storage_key = str(pathlib.Path(prefix) / date_prefix / unique_name)
         full_path = self.root / storage_key
-
         full_path.parent.mkdir(parents=True, exist_ok=True)
+
         full_path.write_bytes(data)
 
         return StoredFile(

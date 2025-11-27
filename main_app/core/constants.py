@@ -5,8 +5,8 @@ from aiogram import Bot, Dispatcher
 from faststream.rabbit import RabbitBroker
 from faststream.redis import Redis
 
-from main_app.settings import settings
-from main_app.storage import LocalFileStorage
+from main_app.core.settings import settings
+from main_app.infrastructure.storage import LocalFileStorage
 
 MAIN_DIR: Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[1]
 
