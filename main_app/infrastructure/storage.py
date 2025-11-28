@@ -5,6 +5,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from main_app.core.constants import FILES_ROOT
+
 
 class StoredFile(BaseModel):
     """
@@ -74,3 +76,6 @@ class LocalFileStorage:
             full_path.unlink()
         except FileNotFoundError:
             pass
+
+# Локальное хранилище, потом можно будет заменить на S3FileStorage.
+storage = LocalFileStorage(FILES_ROOT)

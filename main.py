@@ -1,19 +1,18 @@
 import asyncio
-import logging
 
-import sys
-
-from main_app.core.constants import broker, dp, bot
+from main_app.core.logger import logger
+from main_app.infrastructure.bot_factory import dp, bot
+from main_app.infrastructure.rabbit_connector import broker
 
 
 async def main():
+    logger.info("Bot service starting...")
     async with broker:
         await broker.start()
-        logging.info("Broker started")
+        logger.info("Broker started, starting polling")
         await dp.start_polling(bot)
-    logging.info("Well done! Good work!")
+    logger.info("Bot service stopped")
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, stream=sys.stdout)
     asyncio.run(main())

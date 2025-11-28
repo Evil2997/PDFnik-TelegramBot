@@ -14,17 +14,8 @@ BOT_TOKEN = settings.BOT_TOKEN
 RABBITMQ_URL = settings.RABBITMQ_URL
 REDIS_URL = settings.REDIS_URL
 
-redis = Redis.from_url(REDIS_URL)
-broker = RabbitBroker(RABBITMQ_URL)
-
-dp = Dispatcher()
-
-bot = Bot(token=BOT_TOKEN)
-
 # Корень "почти S3"-хранилища.
 # В docker-compose этот путь смонтирован как volume files_storage.
 FILES_ROOT: Final[pathlib.Path] = pathlib.Path("/data_files_storage")
 FILES_ROOT.mkdir(exist_ok=True)
 
-# Локальное хранилище, потом можно будет заменить на S3FileStorage.
-storage = LocalFileStorage(FILES_ROOT)
