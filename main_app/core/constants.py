@@ -1,12 +1,7 @@
 import pathlib
 from typing import Final
 
-from aiogram import Bot, Dispatcher
-from faststream.rabbit import RabbitBroker
-from faststream.redis import Redis
-
 from main_app.core.settings import settings
-from main_app.infrastructure.storage import LocalFileStorage
 
 MAIN_DIR: Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[1]
 
@@ -18,4 +13,3 @@ REDIS_URL = settings.REDIS_URL
 # В docker-compose этот путь смонтирован как volume files_storage.
 FILES_ROOT: Final[pathlib.Path] = pathlib.Path("/data_files_storage")
 FILES_ROOT.mkdir(exist_ok=True)
-
