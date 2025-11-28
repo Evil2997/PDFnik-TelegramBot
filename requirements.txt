@@ -5,3 +5,4 @@ faststream[redis]==0.6.3
 
 pydantic==2.11.10
 pydantic-settings==2.11.0
+pdfnik-schemes @ git+https://github.com/Evil2997/PDFnik-Schemes@v1.0.2

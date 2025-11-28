@@ -1,4 +1,4 @@
-from main_app.domain.contracts import BotDocument
+from pdfnik_contracts.pdf_content import BotDocument
 from aiogram.types import BufferedInputFile
 from main_app.core.constants import broker, bot, storage
 

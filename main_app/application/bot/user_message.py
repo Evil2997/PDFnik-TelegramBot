@@ -3,7 +3,7 @@ from io import BytesIO
 
 from aiogram.types import Message
 
-from main_app.domain.contracts import TextItem, ImageItem
+from pdfnik_contracts.pdf_content import PdfItemType, PdfImageItem, PdfTextItem
 from main_app.core.constants import broker, dp, bot, redis, storage
 from main_app.domain.build_stats_message import build_stats_message
 
@@ -48,7 +48,7 @@ async def user_message(msg: Message):
     #  Сбор текстов
     # -------------------------------------------------------
     if msg.text:
-        item = TextItem(type="text", text=msg.text)
+        item = PdfTextItem(type="text", text=msg.text)
         # сохраняем JSON строки модели в Redis
         await redis.rpush(key, item.model_dump_json())
         return
@@ -71,7 +71,7 @@ async def user_message(msg: Message):
             content_type="image/jpeg",
         )
 
-        item = ImageItem(
+        item = PdfImageItem(
             type="image",
             filename=stored.filename,
             storage_key=stored.storage_key,
