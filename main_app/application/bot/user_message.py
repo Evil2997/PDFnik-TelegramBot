@@ -68,8 +68,24 @@ def register_user_message_handlers(
 
             items = [json.loads(x) for x in data]
 
-            texts = sum(1 for x in items if x["type"] == "text")
-            images = sum(1 for x in items if x["type"] == "image")
+            from pdfnik_contracts.pdf_content import PdfBlockType  # добавь к импортам
+
+            def _get_type(x: dict) -> str:
+                # x["type"] может быть строкой, enum, или отсутствовать (на всякий)
+                t = x.get("type")
+                return str(t) if t is not None else ""
+
+            texts = sum(1 for x in items if _get_type(x) in (PdfBlockType.TEXT, str(PdfBlockType.TEXT), "text"))
+            images = sum(1 for x in items if _get_type(x) in (PdfBlockType.IMAGE, str(PdfBlockType.IMAGE), "image"))
+
+            # на будущее: если вдруг в очереди окажутся уже нормализованные блоки
+            # paragraphs = sum(
+            #     1 for x in items if _get_type(x) in (PdfBlockType.PARAGRAPH, str(PdfBlockType.PARAGRAPH), "paragraph"))
+            # lists = sum(1 for x in items if _get_type(x) in (PdfBlockType.LIST, str(PdfBlockType.LIST), "list"))
+            # prices = sum(1 for x in items if
+            #              _get_type(x) in (PdfBlockType.PRICE_TABLE, str(PdfBlockType.PRICE_TABLE), "price_table"))
+            # headings = sum(
+            #     1 for x in items if _get_type(x) in (PdfBlockType.HEADING, str(PdfBlockType.HEADING), "heading"))
 
             await msg.answer(build_stats_message(0, images, texts))
 
