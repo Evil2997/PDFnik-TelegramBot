@@ -5,19 +5,52 @@ from aiogram import Dispatcher, Bot
 from aiogram.types import Message
 from faststream.rabbit import RabbitBroker
 from faststream.redis import Redis
-from pdfnik_contracts.pdf_content import PdfImageItem, PdfTextItem
+
+from pdfnik_contracts.pdf_content import (
+    PdfTextBlock,
+    PdfImageBlock,
+    PdfRichText,
+    PdfTextEntity,
+    TextEntityType, PdfImageRef,
+)
 
 from main_app.core.logger import logger
 from main_app.domain.build_stats_message import build_stats_message
 from main_app.infrastructure.storage import LocalFileStorage
 
 
+def _convert_entities(entities):
+    if not entities:
+        return []
+
+    result = []
+    for e in entities:
+        if e.type == "url":
+            result.append(
+                PdfTextEntity(
+                    type=TextEntityType.URL,
+                    offset=e.offset,
+                    length=e.length,
+                )
+            )
+        elif e.type == "text_link":
+            result.append(
+                PdfTextEntity(
+                    type=TextEntityType.TEXT_LINK,
+                    offset=e.offset,
+                    length=e.length,
+                    url=e.url,
+                )
+            )
+    return result
+
+
 def register_user_message_handlers(
-        dp: Dispatcher,
-        broker: RabbitBroker,
-        redis: Redis,
-        bot: Bot,
-        storage: LocalFileStorage,
+    dp: Dispatcher,
+    broker: RabbitBroker,
+    redis: Redis,
+    bot: Bot,
+    storage: LocalFileStorage,
 ) -> None:
     @dp.message()
     async def user_message(msg: Message):
@@ -25,66 +58,64 @@ def register_user_message_handlers(
         key = f"pdf_session:{chat_id}"
         logger.info(f"Incoming message from chat {chat_id}")
 
+        # DONE
         if msg.text and msg.text.strip().lower() in ("done", "готово"):
-            logger.info(f"DONE command from chat {chat_id}")
             data = await redis.lrange(key, 0, -1)
 
             if not data:
-                logger.warning(f"DONE but no session items for chat {chat_id}")
                 await msg.answer("Пока нечего собирать — отправьте текст или фото 🙂")
                 return
 
             items = [json.loads(x) for x in data]
 
-            files = sum(1 for x in items if x.get("type") == "file")
-            photos = sum(1 for x in items if x.get("type") == "image")
-            texts = sum(1 for x in items if x.get("type") == "text")
+            texts = sum(1 for x in items if x["type"] == "text")
+            images = sum(1 for x in items if x["type"] == "image")
 
-            logger.info(
-                f"Session summary for chat {chat_id}: "
-                f"{files} files, {photos} photos, {texts} texts"
+            await msg.answer(build_stats_message(0, images, texts))
+
+            await broker.publish(
+                message={"chat_id": chat_id, "items": items},
+                queue="pdf.generate",
             )
-            await msg.answer(build_stats_message(files, photos, texts))
-
-            try:
-                await broker.publish(
-                    message={"chat_id": chat_id, "items": items},
-                    queue="pdf.generate",
-                )
-                logger.info(f"PDF job published for chat {chat_id} to pdf.generate")
-            except Exception as e:
-                logger.error(f"Failed to publish PDF job for chat {chat_id}: {e}")
-            finally:
-                await redis.delete(key)
+            await redis.delete(key)
             return
 
-        if msg.text:
-            logger.info(f"Saving text message for chat {chat_id}")
-            item = PdfTextItem(text=msg.text)
-            await redis.rpush(key, item.model_dump_json())
-            return
-
+        # PHOTO (image block)
         if msg.photo:
-            logger.info(f"Saving photo message for chat {chat_id}")
             p = msg.photo[-1]
 
             buf = BytesIO()
             await bot.download(p, destination=buf)
             img_bytes = buf.getvalue()
 
-            try:
-                stored = await storage.save_bytes(
-                    img_bytes,
-                    prefix="images",
-                    filename=f"{p.file_unique_id}.jpg",
-                    content_type="image/jpeg",
-                )
-                item = PdfImageItem(
+            stored = await storage.save_bytes(
+                img_bytes,
+                prefix="images",
+                filename=f"{p.file_unique_id}.jpg",
+                content_type="image/jpeg",
+            )
+
+            block = PdfImageBlock(
+                image=PdfImageRef(
                     filename=stored.filename,
                     storage_key=stored.storage_key,
+                ),
+                caption=PdfRichText(
+                    text=msg.caption,
+                    entities=_convert_entities(msg.caption_entities),
+                ) if msg.caption else None,
+            )
+
+            await redis.rpush(key, block.model_dump_json())
+            return
+
+        # TEXT block
+        if msg.text:
+            block = PdfTextBlock(
+                content=PdfRichText(
+                    text=msg.text,
+                    entities=_convert_entities(msg.entities),
                 )
-                await redis.rpush(key, item.model_dump_json())
-                logger.info(f"Photo stored for chat {chat_id}")
-            except Exception as e:
-                logger.error(f"Failed to save photo for chat {chat_id}: {e}")
+            )
+            await redis.rpush(key, block.model_dump_json())
             return
