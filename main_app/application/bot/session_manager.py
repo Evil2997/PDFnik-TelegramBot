@@ -1,17 +1,61 @@
 import asyncio
 import time
+from typing import Optional
 
 from aiogram import Bot
 from faststream.redis import Redis
-
-# Таймеры, запущенные для каждого чата (локально для процесса).
-pause_tasks: dict[int, asyncio.Task] = {}
+from pydantic import BaseModel, ConfigDict, Field
 
 # Дебаунс для ACK в секундах.
 ACK_DEBOUNCE_SEC = 2.0
 
 # Время паузы (тишины) перед отправкой мягкого напоминания, сек.
 PAUSE_DURATION_SEC = 10.0
+
+
+class PauseTaskEntry(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    chat_id: int
+    version: int
+    created_at: float = Field(default_factory=time.time)
+    task: asyncio.Task
+
+
+class PauseTaskRegistry(BaseModel):
+    """
+    Реестр таймеров БЕЗ dict/Dict.
+
+    Храним записи как динамические атрибуты модели:
+      pause_tasks.<chat_id> = PauseTaskEntry(...)
+    Где <chat_id> — строка.
+    """
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
+
+    def _key(self, chat_id: int) -> str:
+        return str(chat_id)
+
+    def get(self, chat_id: int) -> Optional[PauseTaskEntry]:
+        return getattr(self, self._key(chat_id), None)
+
+    def set(self, entry: PauseTaskEntry) -> None:
+        setattr(self, self._key(entry.chat_id), entry)
+
+    def pop(self, chat_id: int) -> Optional[PauseTaskEntry]:
+        key = self._key(chat_id)
+        entry = getattr(self, key, None)
+        if entry is not None:
+            delattr(self, key)
+        return entry
+
+    def cancel(self, chat_id: int) -> None:
+        entry = self.pop(chat_id)
+        if entry and entry.task:
+            entry.task.cancel()
+
+
+pause_tasks = PauseTaskRegistry()
+
 
 async def ack_user_activity(chat_id: int, bot: Bot, redis: Redis) -> None:
     """
@@ -27,6 +71,7 @@ async def ack_user_activity(chat_id: int, bot: Bot, redis: Redis) -> None:
         await bot.send_message(chat_id, "Принял, жду ещё…")
         await redis.set(ts_key, str(now))
 
+
 async def schedule_pause_check(chat_id: int, bot: Bot, redis: Redis) -> None:
     """
     Ставит/перезапускает таймер паузы на PAUSE_DURATION_SEC.
@@ -38,22 +83,21 @@ async def schedule_pause_check(chat_id: int, bot: Bot, redis: Redis) -> None:
     # Увеличиваем версию; если ключа нет, INCR создаст его со значением 1.
     version = await redis.incr(version_key)
 
-    # Отменяем существующий локальный таймер для этого чата, если есть.
-    current_task = pause_tasks.pop(chat_id, None)
-    if current_task:
-        current_task.cancel()
+    # отменяем предыдущий таймер
+    pause_tasks.cancel(chat_id)
 
     async def _timer(expected_version: int) -> None:
         try:
             await asyncio.sleep(PAUSE_DURATION_SEC)
-            # Сравниваем текущую версию с ожидаемой.
-            current_version_raw = await redis.get(version_key)
-            current_version = int(current_version_raw or 0)
+
+            current_raw = await redis.get(version_key)
+            current_version = int(current_raw or 0)
+
             if current_version == expected_version:
                 # Никаких новых сообщений за время паузы
                 await bot.send_message(
                     chat_id,
-                    "Пока всё понял. Можешь продолжать или напиши /done, когда закончишь."
+                    "Пока всё понял. Можешь продолжать или напиши /done, когда закончишь.",
                 )
         except asyncio.CancelledError:
             # Таймер был отменён — ничего не делаем
@@ -61,7 +105,14 @@ async def schedule_pause_check(chat_id: int, bot: Bot, redis: Redis) -> None:
 
     # Запускаем новый таймер и сохраняем в словарь для возможной отмены.
     task = asyncio.create_task(_timer(version))
-    pause_tasks[chat_id] = task
+    pause_tasks.set(
+        PauseTaskEntry(
+            chat_id=chat_id,
+            version=version,
+            task=task,
+        )
+    )
+
 
 async def cancel_pause_check(chat_id: int, redis: Redis) -> None:
     """
@@ -72,7 +123,4 @@ async def cancel_pause_check(chat_id: int, redis: Redis) -> None:
     # Удаляем версию таймера в Redis (считается, что сессия завершена).
     await redis.delete(version_key)
 
-    # Отменяем локальный таймер.
-    current_task = pause_tasks.pop(chat_id, None)
-    if current_task:
-        current_task.cancel()
+    pause_tasks.cancel(chat_id)
