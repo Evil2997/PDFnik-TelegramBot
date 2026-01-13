@@ -2,25 +2,24 @@ from io import BytesIO
 
 from aiogram import Dispatcher, Bot, F
 from aiogram.types import Message
-from faststream.rabbit import RabbitBroker
 from faststream.redis import Redis
 from pdfnik_contracts.pdf_content import (
-    PdfTextBlock,
     PdfImageBlock,
+    PdfImageRef,
     PdfRichText,
+    PdfTextBlock,
     PdfTextEntity,
     TextEntityType,
-    PdfImageRef,
 )
 
 from main_app.core.logger import logger
 from main_app.infrastructure.storage import LocalFileStorage
+from .session_manager import ack_user_activity, schedule_pause_check
 
 
 def _convert_entities(entities):
     if not entities:
         return []
-
     result = []
     for e in entities:
         if e.type == "url":
@@ -49,6 +48,7 @@ def register_user_message_handlers(
         bot: Bot,
         storage: LocalFileStorage,
 ) -> None:
+    # Общий хендлер: НЕ ловит команды, принимает текст/фото и сохраняет в Redis.
     @dp.message(~F.text.regexp(r"^/"))
     async def user_message(msg: Message):
         chat_id = msg.chat.id
@@ -84,6 +84,10 @@ def register_user_message_handlers(
             )
 
             await redis.rpush(key, block.model_dump_json())
+
+            # Мгновенный ACK + перезапуск таймера
+            await ack_user_activity(chat_id, bot, redis)
+            await schedule_pause_check(chat_id, bot, redis)
             return
 
         # TEXT block
@@ -95,4 +99,8 @@ def register_user_message_handlers(
                 )
             )
             await redis.rpush(key, block.model_dump_json())
+
+            # Мгновенный ACK + перезапуск таймера
+            await ack_user_activity(chat_id, bot, redis)
+            await schedule_pause_check(chat_id, bot, redis)
             return
