@@ -16,10 +16,37 @@ PAUSE_DURATION_SEC = 10.0
 class PauseTaskEntry(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    chat_id: int
-    version: int
-    created_at: float = Field(default_factory=time.time)
-    task: asyncio.Task
+    chat_id: int = Field(
+        description=(
+            "Telegram chat ID, к которому привязан таймер тишины. "
+            "Используется для однозначной связи таймера с пользовательской сессией."
+        )
+    )
+
+    version: int = Field(
+        description=(
+            "Версия (поколение) таймера тишины. "
+            "Инкрементируется при каждом новом сообщении пользователя и используется "
+            "для защиты от race conditions: устаревшие таймеры не отправляют сообщения."
+        )
+    )
+
+    created_at: float = Field(
+        default_factory=time.time,
+        description=(
+            "Unix-timestamp момента создания таймера. "
+            "Нужен для отладки, диагностики и возможных будущих метрик. "
+            "На текущую бизнес-логику не влияет."
+        ),
+    )
+
+    task: asyncio.Task = Field(
+        description=(
+            "Асинхронная asyncio.Task, реализующая таймер тишины. "
+            "После ожидания проверяет version и либо отправляет сообщение о паузе, "
+            "либо завершается как устаревшая."
+        )
+    )
 
 
 class PauseTaskRegistry(BaseModel):
