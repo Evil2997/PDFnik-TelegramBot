@@ -6,11 +6,8 @@ from aiogram import Bot
 from faststream.redis import Redis
 from pydantic import BaseModel, ConfigDict, Field
 
-# Дебаунс для ACK в секундах.
-ACK_DEBOUNCE_SEC = 2.0
-
 # Время паузы (тишины) перед отправкой мягкого напоминания, сек.
-PAUSE_DURATION_SEC = 10.0
+PAUSE_DURATION_SEC = 15.0
 
 
 class PauseTaskEntry(BaseModel):
@@ -84,20 +81,6 @@ class PauseTaskRegistry(BaseModel):
 pause_tasks = PauseTaskRegistry()
 
 
-async def ack_user_activity(chat_id: int, bot: Bot, redis: Redis) -> None:
-    """
-    Отправляет мгновенный ACK «Принял, жду ещё…» один раз в ACK_DEBOUNCE_SEC.
-    Хранит timestamp последнего ACK в Redis (`pdf_session:ack_ts:{chat_id}`).
-    """
-    ts_key = f"pdf_session:ack_ts:{chat_id}"
-    now = time.time()
-
-    last_ts = await redis.get(ts_key)
-    # Если никогда не отправляли или прошло достаточно времени — отправляем ACK.
-    if not last_ts or (now - float(last_ts)) >= ACK_DEBOUNCE_SEC:
-        await bot.send_message(chat_id, "Принял, жду ещё…")
-        await redis.set(ts_key, str(now))
-
 
 async def schedule_pause_check(chat_id: int, bot: Bot, redis: Redis) -> None:
     """
@@ -124,7 +107,7 @@ async def schedule_pause_check(chat_id: int, bot: Bot, redis: Redis) -> None:
                 # Никаких новых сообщений за время паузы
                 await bot.send_message(
                     chat_id,
-                    "Пока всё понял. Можешь продолжать или напиши /done, когда закончишь.",
+                    "Продолжайте или напишите /done, когда все будет готово.",
                 )
         except asyncio.CancelledError:
             # Таймер был отменён — ничего не делаем

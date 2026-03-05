@@ -3,7 +3,6 @@ import json
 from aiogram import Dispatcher
 from aiogram.filters import Command
 from aiogram.types import Message
-from pdfnik_contracts.pdf_content import PdfBlockType
 
 from main_app.application.bot.commands_text import HELP_TEXT, START_TEXT
 from main_app.application.bot.session_manager import cancel_pause_check
@@ -47,20 +46,21 @@ def register_command_handlers(dp: Dispatcher) -> None:
 
         items = [json.loads(_to_str(x)) for x in data]
 
-        def _get_type(x: dict) -> str:
-            t = x.get("type")
-            return str(t) if t is not None else ""
+        # items = [json.loads(...)] уже есть
 
-        texts = sum(
+        images = sum(1 for x in items if "image" in x)
+
+        texts_plain = sum(1 for x in items if "content" in x)
+
+        texts_captions = sum(
             1
             for x in items
-            if _get_type(x) in (PdfBlockType.TEXT, str(PdfBlockType.TEXT), "text")
+            if "image" in x
+            and isinstance(x.get("caption"), dict)
+            and (x["caption"].get("text") or "").strip()
         )
-        images = sum(
-            1
-            for x in items
-            if _get_type(x) in (PdfBlockType.IMAGE, str(PdfBlockType.IMAGE), "image")
-        )
+
+        texts = texts_plain + texts_captions
 
         await msg.answer(build_stats_message(0, images, texts))
 
