@@ -1,19 +1,19 @@
-from __future__ import annotations
-
 import pathlib
 import re
 import uuid
 from io import BytesIO
-from typing import Optional, Tuple
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Audio, Document, Message, Video, Voice
 from faststream.rabbit import RabbitBroker
+from faststream.redis import Redis
 
+from main_app.application.bot.vtt_contracts import TxtDelivery
+from main_app.application.bot.vtt_contracts import TxtReply
+from main_app.application.bot.vtt_contracts import TxtTarget
+from main_app.application.bot.vtt_contracts import TxtTranscribeRequest
 from main_app.core.logger import logger
 from main_app.infrastructure.storage import LocalFileStorage
-from .vtt_contracts import SourceType, TxtTranscribeRequest
-
 
 _MIME_DEFAULT_EXT: dict[str, str] = {
     "audio/ogg": ".ogg",
@@ -31,141 +31,157 @@ _MIME_DEFAULT_EXT: dict[str, str] = {
 }
 
 _YOUTUBE_RE = re.compile(
-    r"(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/)[\w\-]+([&?][^\s]+)?",
+    r"(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/)[^\s]+",
     re.IGNORECASE,
 )
 
+_VTT_DEDUP_TTL_SEC = 300
+
 
 def _safe_suffix(filename: str) -> str:
-    suf = pathlib.Path(filename).suffix
-    return suf if suf else ""
+    suffix = pathlib.Path(filename).suffix
+    return suffix if suffix else ""
 
 
-def _infer_source_type_and_meta(msg: Message) -> Tuple[SourceType, str, Optional[str]]:
+def _infer_upload_meta(msg: Message) -> tuple[str, str, str]:
     """
-    Returns: (source_type, filename, mime_type)
-    filename must have extension.
+    Возвращает:
+      (source_type, filename, mime_type)
     """
-    # VOICE
     if msg.voice:
-        v: Voice = msg.voice
-        mime = v.mime_type or "audio/ogg"
-        ext = _MIME_DEFAULT_EXT.get(mime, ".ogg")
-        filename = f"{v.file_unique_id}{ext}"
-        return "voice", filename, mime
+        voice: Voice = msg.voice
+        mime_type = voice.mime_type or "audio/ogg"
+        extension = _MIME_DEFAULT_EXT.get(mime_type, ".ogg")
+        filename = f"{voice.file_unique_id}{extension}"
+        return "voice", filename, mime_type
 
-    # AUDIO
     if msg.audio:
-        a: Audio = msg.audio
-        mime = a.mime_type or "audio/mpeg"
-        filename = a.file_name or f"{a.file_unique_id}{_MIME_DEFAULT_EXT.get(mime, '.mp3')}"
+        audio: Audio = msg.audio
+        mime_type = audio.mime_type or "audio/mpeg"
+        filename = audio.file_name or f"{audio.file_unique_id}{_MIME_DEFAULT_EXT.get(mime_type, '.mp3')}"
         if not _safe_suffix(filename):
-            filename = f"{filename}{_MIME_DEFAULT_EXT.get(mime, '.mp3')}"
-        return "audio", filename, mime
+            filename = f"{filename}{_MIME_DEFAULT_EXT.get(mime_type, '.mp3')}"
+        return "audio", filename, mime_type
 
-    # VIDEO
     if msg.video:
-        v: Video = msg.video
-        mime = v.mime_type or "video/mp4"
-        filename = v.file_name or f"{v.file_unique_id}{_MIME_DEFAULT_EXT.get(mime, '.mp4')}"
+        video: Video = msg.video
+        mime_type = video.mime_type or "video/mp4"
+        filename = video.file_name or f"{video.file_unique_id}{_MIME_DEFAULT_EXT.get(mime_type, '.mp4')}"
         if not _safe_suffix(filename):
-            filename = f"{filename}{_MIME_DEFAULT_EXT.get(mime, '.mp4')}"
-        return "video", filename, mime
+            filename = f"{filename}{_MIME_DEFAULT_EXT.get(mime_type, '.mp4')}"
+        return "video", filename, mime_type
 
-    # DOCUMENT (audio/video only)
     if msg.document:
-        d: Document = msg.document
-        mime = d.mime_type or "application/octet-stream"
-        # decide whether it's audio or video
-        st: SourceType = "audio" if mime.lower().startswith("audio/") else "video"
-        filename = d.file_name or f"{d.file_unique_id}{_MIME_DEFAULT_EXT.get(mime, '')}"
+        document: Document = msg.document
+        mime_type = document.mime_type or "application/octet-stream"
+        source_type = "audio" if mime_type.lower().startswith("audio/") else "video"
+        filename = document.file_name or f"{document.file_unique_id}{_MIME_DEFAULT_EXT.get(mime_type, '')}"
         if not _safe_suffix(filename):
-            ext = _MIME_DEFAULT_EXT.get(mime, ".bin")
-            filename = f"{filename}{ext}"
-        return st, filename, mime
+            filename = f"{filename}{_MIME_DEFAULT_EXT.get(mime_type, '.bin')}"
+        return source_type, filename, mime_type
 
-    # fallback (should not happen)
     return "audio", "file.bin", "application/octet-stream"
 
 
+def _resolve_delivery_mode(source_type: str) -> str:
+    return "text" if source_type == "voice" else "document"
+
+
 async def _download_media_bytes(bot: Bot, msg: Message) -> bytes:
-    buf = BytesIO()
-    await bot.download(msg.voice or msg.audio or msg.video or msg.document, destination=buf)
-    return buf.getvalue()
+    buffer = BytesIO()
+    await bot.download(msg.voice or msg.audio or msg.video or msg.document, destination=buffer)
+    return buffer.getvalue()
 
 
 def _is_supported_document(msg: Message) -> bool:
     if not msg.document:
         return False
-    mime = (msg.document.mime_type or "").lower()
-    return mime.startswith("audio/") or mime.startswith("video/")
+    mime_type = (msg.document.mime_type or "").lower()
+    return mime_type.startswith("audio/") or mime_type.startswith("video/")
 
 
-def _extract_first_youtube_url(text: str) -> Optional[str]:
-    m = _YOUTUBE_RE.search(text or "")
-    if not m:
+def _extract_first_youtube_url(text: str) -> str | None:
+    match = _YOUTUBE_RE.search(text or "")
+    if not match:
         return None
-    url = m.group(0)
+
+    url = match.group(0)
     if not url.lower().startswith("http"):
         url = "https://" + url
     return url
 
 
-def register_vtt_message_handlers(
-    dp: Dispatcher,
-    bot: Bot,
-    storage: LocalFileStorage,
-    broker: RabbitBroker,
-) -> None:
-    """
-    Ingress:
-      - voice/audio/video/document(audio|video)
-      - YouTube link (text message containing youtube.com/youtu.be)
-      - publish -> txt.transcribe
-      - ACK immediately
-    """
+def _build_dedupe_key(chat_id: int, message_id: int) -> str:
+    return f"vtt:dedupe:{chat_id}:{message_id}"
 
-    async def _publish_job(
-        *,
-        job_id: str,
-        chat_id: int,
-        reply_to_message_id: Optional[int],
-        source_type: SourceType,
-        filename: str,
-        mime_type: Optional[str],
-        storage_key: Optional[str] = None,
-        input_url: Optional[str] = None,
-    ) -> bool:
-        req = TxtTranscribeRequest(
-            job_id=job_id,
-            chat_id=chat_id,
-            reply_to_message_id=reply_to_message_id,
-            source_type=source_type,
-            storage_key=storage_key,
-            input_url=input_url,
-            filename=filename,
-            mime_type=mime_type,
-            language=None,
-            cfg=None,
+
+async def _acquire_dedupe_lock(redis: Redis, chat_id: int, message_id: int) -> bool:
+    key = _build_dedupe_key(chat_id, message_id)
+    try:
+        result = await redis.set(key, "1", ex=_VTT_DEDUP_TTL_SEC, nx=True)
+        return bool(result)
+    except Exception as exc:
+        logger.exception(
+            "VTT dedupe check failed: chat_id=%s message_id=%s err=%s",
+            chat_id,
+            message_id,
+            exc,
         )
+        return True
+
+
+def register_vtt_message_handlers(
+        dp: Dispatcher,
+        bot: Bot,
+        storage: LocalFileStorage,
+        broker: RabbitBroker,
+        redis: Redis,
+) -> None:
+    async def _publish_job(
+            *,
+            job_id: str,
+            target_kind: str,
+            target_value: str,
+            chat_id: int,
+            reply_to_message_id: int | None,
+            source_type: str,
+    ) -> bool:
+        payload = TxtTranscribeRequest(
+            job_id=job_id,
+            target=TxtTarget(
+                kind=target_kind,
+                value=target_value,
+            ),
+            reply=TxtReply(
+                chat_id=chat_id,
+                reply_to_message_id=reply_to_message_id,
+            ),
+            delivery=TxtDelivery(
+                source_type=source_type,
+                mode=_resolve_delivery_mode(source_type),
+            ),
+            cfg={},
+        )
+
         try:
-            await broker.publish(req.model_dump(), queue="txt.transcribe")
+            await broker.publish(payload.model_dump(exclude_none=True), queue="txt.transcribe")
             logger.info(
-                "VTT publish ok: chat_id=%s job_id=%s source_type=%s storage_key=%s input_url=%s",
-                chat_id,
+                "event=vtt_publish_ok job_id=%s chat_id=%s source_type=%s target_kind=%s target_value=%s",
                 job_id,
+                chat_id,
                 source_type,
-                storage_key,
-                input_url,
+                target_kind,
+                target_value,
             )
             return True
-        except Exception as e:
+        except Exception as exc:
             logger.exception(
-                "VTT publish failed: chat_id=%s job_id=%s source_type=%s err=%s",
-                chat_id,
+                "event=vtt_publish_failed job_id=%s chat_id=%s source_type=%s target_kind=%s err=%s",
                 job_id,
+                chat_id,
                 source_type,
-                e,
+                target_kind,
+                exc,
             )
             return False
 
@@ -173,51 +189,58 @@ def register_vtt_message_handlers(
         chat_id = msg.chat.id
         reply_to_message_id = msg.message_id
 
-        source_type, filename, mime_type = _infer_source_type_and_meta(msg)
+        is_new_message = await _acquire_dedupe_lock(redis, chat_id, reply_to_message_id)
+        if not is_new_message:
+            logger.info(
+                "event=vtt_duplicate_ignored chat_id=%s message_id=%s source_type=upload target_kind=storage_key",
+                chat_id,
+                reply_to_message_id,
+            )
+            return
+
+        source_type, filename, mime_type = _infer_upload_meta(msg)
         job_id = str(uuid.uuid4())
 
         try:
-            data = await _download_media_bytes(bot, msg)
-        except Exception as e:
+            file_bytes = await _download_media_bytes(bot, msg)
+        except Exception as exc:
             logger.exception(
-                "Failed to download media: chat_id=%s job_id=%s source_type=%s err=%s",
-                chat_id,
+                "event=vtt_download_failed job_id=%s chat_id=%s source_type=%s target_kind=storage_key err=%s",
                 job_id,
+                chat_id,
                 source_type,
-                e,
+                exc,
             )
             await msg.answer("Не смог скачать файл из Telegram. Попробуйте ещё раз.")
             return
 
         try:
             stored = await storage.save_bytes(
-                data,
+                file_bytes,
                 prefix="uploads",
                 filename=filename,
                 content_type=mime_type or "application/octet-stream",
             )
-        except Exception as e:
+        except Exception as exc:
             logger.exception(
-                "Failed to save media: chat_id=%s job_id=%s source_type=%s err=%s",
-                chat_id,
+                "event=vtt_storage_save_failed job_id=%s chat_id=%s source_type=%s target_kind=storage_key err=%s",
                 job_id,
+                chat_id,
                 source_type,
-                e,
+                exc,
             )
             await msg.answer("Не смог сохранить файл. Попробуйте ещё раз.")
             return
 
-        ok = await _publish_job(
+        is_published = await _publish_job(
             job_id=job_id,
+            target_kind="storage_key",
+            target_value=stored.storage_key,
             chat_id=chat_id,
             reply_to_message_id=reply_to_message_id,
             source_type=source_type,
-            filename=stored.filename,
-            mime_type=mime_type,
-            storage_key=stored.storage_key,
-            input_url=None,
         )
-        if not ok:
+        if not is_published:
             await msg.answer(
                 "Не смог отправить задачу на расшифровку. Попробуйте позже.\n"
                 f"job_id: {job_id}"
@@ -229,37 +252,45 @@ def register_vtt_message_handlers(
     async def _handle_youtube_link(msg: Message, url: str) -> None:
         chat_id = msg.chat.id
         reply_to_message_id = msg.message_id
+
+        is_new_message = await _acquire_dedupe_lock(redis, chat_id, reply_to_message_id)
+        if not is_new_message:
+            logger.info(
+                "event=vtt_duplicate_ignored chat_id=%s message_id=%s source_type=youtube target_kind=url",
+                chat_id,
+                reply_to_message_id,
+            )
+            return
+
         job_id = str(uuid.uuid4())
 
-        # минимальный контракт: отправляем input_url воркеру
-        ok = await _publish_job(
+        is_published = await _publish_job(
             job_id=job_id,
+            target_kind="url",
+            target_value=url,
             chat_id=chat_id,
             reply_to_message_id=reply_to_message_id,
             source_type="youtube",
-            filename=f"youtube_{job_id}.mp4",  # воркеру может быть полезно иметь "имя"
-            mime_type=None,
-            storage_key=None,
-            input_url=url,
         )
-        if not ok:
+        if not is_published:
             await msg.answer(
-                "YouTube сейчас недоступен (не смог отправить задачу).\n"
+                "Не смог отправить YouTube на расшифровку. Попробуйте позже.\n"
                 f"job_id: {job_id}"
             )
             return
 
         await msg.answer("Принял, расшифровываю…")
 
-    # YouTube link ingress (must be registered before general text handler)
     @dp.message(F.text)
     async def on_text_youtube(msg: Message) -> None:
         if not msg.text:
             return
-        url = _extract_first_youtube_url(msg.text)
-        if not url:
-            return  # allow other text handlers to process
-        await _handle_youtube_link(msg, url)
+
+        youtube_url = _extract_first_youtube_url(msg.text)
+        if not youtube_url:
+            return
+
+        await _handle_youtube_link(msg, youtube_url)
 
     @dp.message(F.voice)
     async def on_voice(msg: Message) -> None:
@@ -278,4 +309,5 @@ def register_vtt_message_handlers(
         if not _is_supported_document(msg):
             await msg.answer("Этот документ не похож на аудио/видео. Пришлите voice/audio/video 🙂")
             return
+
         await _handle_upload(msg)

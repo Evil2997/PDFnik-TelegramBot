@@ -1,120 +1,162 @@
-from __future__ import annotations
+from typing import Any, Literal
 
-from typing import Any, Dict, Literal, Optional
-
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-
+from pydantic import BaseModel, ConfigDict, Field
 
 SourceType = Literal["voice", "audio", "video", "youtube"]
+DeliveryMode = Literal["text", "document"]
+TargetKind = Literal["storage_key", "url"]
+
+
+class TxtTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: TargetKind
+    value: str = Field(min_length=1)
+
+
+class TxtReply(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    chat_id: int
+    reply_to_message_id: int | None = None
+
+
+class TxtDelivery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_type: SourceType
+    mode: DeliveryMode
 
 
 class TxtTranscribeRequest(BaseModel):
     """
-    Очередь: txt.transcribe
+    Канонический payload для txt.transcribe.
 
-    Требование:
-      - обязательно source_type
-      - либо storage_key (tg uploads), либо input_url (youtube)
+    Telegram-бот публикует именно эту форму:
+    {
+      "job_id": "...",
+      "target": {"kind": "storage_key" | "url", "value": "..."},
+      "reply": {"chat_id": 123, "reply_to_message_id": 456},
+      "delivery": {"source_type": "voice", "mode": "text"},
+      "cfg": {}
+    }
     """
     model_config = ConfigDict(extra="forbid")
 
-    job_id: str = Field(description="UUID строкой")
-    chat_id: int
-    reply_to_message_id: Optional[int] = None
-
-    source_type: SourceType
-
-    # Either:
-    storage_key: Optional[str] = Field(
-        default=None,
-        description="Ключ медиа-файла в storage (если пришло из Telegram upload)",
-    )
-    # Or:
-    input_url: Optional[str] = Field(
-        default=None,
-        description="URL (например YouTube) если источник не Telegram upload",
-    )
-
-    # metadata
-    filename: str = Field(description="Имя, которое будет использовано воркером/в ответе")
-    mime_type: Optional[str] = Field(default=None, description="MIME тип (если есть)")
-
-    language: Optional[str] = Field(default=None, description="Подсказка языка, если есть")
-    cfg: Optional[Dict[str, Any]] = Field(default=None, description="Опциональный конфиг воркера")
-
-    @model_validator(mode="after")
-    def _validate_input(self) -> "TxtTranscribeRequest":
-        has_storage = bool(self.storage_key)
-        has_url = bool(self.input_url)
-        if has_storage == has_url:
-            # either both set or both empty
-            raise ValueError("Exactly one of storage_key or input_url must be provided")
-        return self
+    job_id: str = Field(min_length=1)
+    target: TxtTarget
+    reply: TxtReply
+    delivery: TxtDelivery
+    cfg: dict[str, Any] | None = None
 
 
 class TxtDoneSuccess(BaseModel):
-    """
-    Очередь: txt.done (успех)
-    """
-    model_config = ConfigDict(extra="allow")  # allow: воркер может эволюционировать
+    model_config = ConfigDict(extra="allow")
 
-    status: Literal["ok"] = "ok"
     job_id: str
-    chat_id: int
-    reply_to_message_id: Optional[int] = None
-    source_type: SourceType
+    status: Literal["ok"] = "ok"
+    txt_storage_key: str
 
-    txt_storage_key: str = Field(description="Ключ txt результата в storage")
-    cached: Optional[bool] = Field(default=None, description="Признак cache hit (если воркер отдаёт)")
+    reply: TxtReply
+    delivery: TxtDelivery
+
+    cached: bool | None = None
 
 
 class TxtDoneError(BaseModel):
-    """
-    Очередь: txt.done (ошибка)
-    """
     model_config = ConfigDict(extra="allow")
 
-    status: Literal["error"] = "error"
     job_id: str
-    chat_id: int
-    reply_to_message_id: Optional[int] = None
-    source_type: Optional[SourceType] = None
+    status: Literal["error"] = "error"
 
-    error_message: str = Field(description="Короткое описание ошибки")
-    error_code: Optional[str] = Field(default=None, description="Опциональный код ошибки")
+    reply: TxtReply | None = None
+    delivery: TxtDelivery | None = None
+
+    error: str | None = None
+    error_code: str | None = None
+
+
+def _parse_reply(data: dict) -> TxtReply:
+    if isinstance(data.get("reply"), dict):
+        return TxtReply.model_validate(data["reply"])
+
+    return TxtReply(
+        chat_id=int(data["chat_id"]),
+        reply_to_message_id=data.get("reply_to_message_id"),
+    )
+
+
+def _parse_delivery(data: dict) -> TxtDelivery:
+    if isinstance(data.get("delivery"), dict):
+        return TxtDelivery.model_validate(data["delivery"])
+
+    source_type = data.get("source_type") or data.get("delivery_mode") or "video"
+    mode = data.get("mode")
+
+    if not mode:
+        mode = "text" if source_type == "voice" else "document"
+
+    return TxtDelivery(
+        source_type=source_type,
+        mode=mode,
+    )
 
 
 def parse_txt_done_message(data: dict) -> TxtDoneSuccess | TxtDoneError:
     """
-    Нормализатор для совместимости с MVP-воркером.
+    Поддерживает:
+    1) канонический txt.done:
+       {
+         "job_id": "...",
+         "status": "ok",
+         "txt_storage_key": "...",
+         "reply": {...},
+         "delivery": {...},
+         "cached": false
+       }
 
-    Ожидаем:
-      - status: ok|error
-      - txt_storage_key (или возможные legacy-ключи)
-
-    Также подтягиваем source_type если воркер прислал иначе/старым полем.
+    2) legacy-поля:
+       - chat_id / reply_to_message_id
+       - source_type / delivery_mode
+       - result_storage_key / text_storage_key / storage_key
+       - error_message / error
     """
-    status = str(data.get("status") or "").lower().strip()
+    status = str(data.get("status") or "").strip().lower()
 
-    # Normalize error message field
-    if status == "error" or "error_message" in data or "error" in data:
-        if "error_message" not in data and "error" in data:
-            data = {**data, "error_message": str(data.get("error"))}
-        return TxtDoneError.model_validate(data)
+    if status == "error" or "error" in data or "error_message" in data:
+        error_text = data.get("error") or data.get("error_message") or "Unknown error"
 
-    # Success: normalize txt_storage_key
-    if "txt_storage_key" not in data:
-        if "result_storage_key" in data:
-            data = {**data, "txt_storage_key": data["result_storage_key"]}
-        elif "text_storage_key" in data:
-            data = {**data, "txt_storage_key": data["text_storage_key"]}
-        elif "storage_key" in data:
-            # some workers might re-use storage_key for output
-            data = {**data, "txt_storage_key": data["storage_key"]}
+        reply = None
+        if "reply" in data or "chat_id" in data:
+            reply = _parse_reply(data)
 
-    # Normalize source_type
-    if "source_type" not in data:
-        if "delivery_mode" in data:
-            data = {**data, "source_type": data["delivery_mode"]}
+        delivery = None
+        if "delivery" in data or "source_type" in data or "delivery_mode" in data:
+            delivery = _parse_delivery(data)
 
-    return TxtDoneSuccess.model_validate(data)
+        return TxtDoneError(
+            job_id=str(data["job_id"]),
+            status="error",
+            reply=reply,
+            delivery=delivery,
+            error=str(error_text),
+            error_code=data.get("error_code"),
+        )
+
+    txt_storage_key = data.get("txt_storage_key")
+    if not txt_storage_key:
+        txt_storage_key = (
+                data.get("result_storage_key")
+                or data.get("text_storage_key")
+                or data.get("storage_key")
+        )
+
+    normalized = {
+        "job_id": str(data["job_id"]),
+        "status": "ok",
+        "txt_storage_key": txt_storage_key,
+        "reply": _parse_reply(data).model_dump(),
+        "delivery": _parse_delivery(data).model_dump(),
+        "cached": data.get("cached"),
+    }
+    return TxtDoneSuccess.model_validate(normalized)
