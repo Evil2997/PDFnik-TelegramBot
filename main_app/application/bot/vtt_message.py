@@ -30,8 +30,13 @@ _MIME_DEFAULT_EXT: dict[str, str] = {
     "video/webm": ".webm",
 }
 
-_YOUTUBE_RE = re.compile(
-    r"(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/)[^\s]+",
+_YOUTUBE_URL_RE = re.compile(
+    r"(?P<url>"
+    r"(?:https?://)?"
+    r"(?:(?:www|m)\.)?"
+    r"(?:youtube\.com/(?:watch\?(?:[^ \n\r\t]*&)?v=[^ \n\r\t&]+(?:[^ \n\r\t]*)?|shorts/[^ \n\r\t/?&]+(?:\?[^ \n\r\t]*)?)"
+    r"|youtu\.be/[^ \n\r\t/?&]+(?:\?[^ \n\r\t]*)?)"
+    r")",
     re.IGNORECASE,
 )
 
@@ -44,10 +49,6 @@ def _safe_suffix(filename: str) -> str:
 
 
 def _infer_upload_meta(msg: Message) -> tuple[str, str, str]:
-    """
-    Возвращает:
-      (source_type, filename, mime_type)
-    """
     if msg.voice:
         voice: Voice = msg.voice
         mime_type = voice.mime_type or "audio/ogg"
@@ -100,15 +101,18 @@ def _is_supported_document(msg: Message) -> bool:
     return mime_type.startswith("audio/") or mime_type.startswith("video/")
 
 
+def _normalize_url(url: str) -> str:
+    normalized = url.strip().rstrip(".,);]")
+    if not normalized.lower().startswith("http"):
+        normalized = "https://" + normalized
+    return normalized
+
+
 def _extract_first_youtube_url(text: str) -> str | None:
-    match = _YOUTUBE_RE.search(text or "")
+    match = _YOUTUBE_URL_RE.search(text or "")
     if not match:
         return None
-
-    url = match.group(0)
-    if not url.lower().startswith("http"):
-        url = "https://" + url
-    return url
+    return _normalize_url(match.group("url"))
 
 
 def _build_dedupe_key(chat_id: int, message_id: int) -> str:
@@ -166,21 +170,23 @@ def register_vtt_message_handlers(
         try:
             await broker.publish(payload.model_dump(exclude_none=True), queue="txt.transcribe")
             logger.info(
-                "event=vtt_publish_ok job_id=%s chat_id=%s source_type=%s target_kind=%s target_value=%s",
+                "event=vtt_publish_ok job_id=%s chat_id=%s source_type=%s target_kind=%s target_value=%s delivery_mode=%s",
                 job_id,
                 chat_id,
                 source_type,
                 target_kind,
                 target_value,
+                payload.delivery.mode,
             )
             return True
         except Exception as exc:
             logger.exception(
-                "event=vtt_publish_failed job_id=%s chat_id=%s source_type=%s target_kind=%s err=%s",
+                "event=vtt_publish_failed job_id=%s chat_id=%s source_type=%s target_kind=%s delivery_mode=%s err=%s",
                 job_id,
                 chat_id,
                 source_type,
                 target_kind,
+                payload.delivery.mode,
                 exc,
             )
             return False
