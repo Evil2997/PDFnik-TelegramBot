@@ -48,7 +48,7 @@ class PauseTaskEntry(BaseModel):
 
 class PauseTaskRegistry(BaseModel):
     """
-    Реестр таймеров БЕЗ dict/Dict.
+    Реестр таймеров БЕЗ dict/dict.
 
     Храним записи как динамические атрибуты модели:
       pause_tasks.<chat_id> = PauseTaskEntry(...)
@@ -79,7 +79,6 @@ class PauseTaskRegistry(BaseModel):
 
 
 pause_tasks = PauseTaskRegistry()
-
 
 
 async def schedule_pause_check(chat_id: int, bot: Bot, redis: Redis) -> None:
