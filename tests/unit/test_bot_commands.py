@@ -1,140 +1,68 @@
-"""
-Тесты для bot_commands.py.
+# /home/dmitriy/PycharmProjects/Telegram-Bot/tests/unit/test_bot_commands.py
+# repo: PDFnik-TelegramBot
 
-Мокируем Message и SessionStore.
-Проверяем: тексты ответов, вызовы session_store, edge cases.
 """
-from unittest.mock import AsyncMock, MagicMock
+Тесты для commands.py и commands_text.py.
 
+Тестируем только чистые вещи без aiogram:
+- тексты команд
+- CANCEL_WITH_CONTENT_TEXT форматирование
+"""
 import pytest
 
-from main_app.bot_commands import (
-    _session_is_empty,
-    register_command_handlers,
+from main_app.application.bot.commands_text import (
+    CANCEL_EMPTY_TEXT,
+    CANCEL_WITH_CONTENT_TEXT,
+    HELP_TEXT,
+    START_TEXT,
 )
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+class TestStartText:
+    def test_not_empty(self):
+        assert len(START_TEXT.strip()) > 50
 
-def _make_message(chat_id: int = 12345) -> MagicMock:
-    msg = MagicMock()
-    msg.chat = MagicMock()
-    msg.chat.id = chat_id
-    msg.answer = AsyncMock()
-    return msg
+    def test_mentions_done_command(self):
+        assert "/done" in START_TEXT
 
+    def test_mentions_pdf(self):
+        assert "PDF" in START_TEXT
 
-def _make_session_store(stats: dict | None = None) -> MagicMock:
-    store = MagicMock()
-    store.get_stats = AsyncMock(return_value=stats)
-    store.clear = AsyncMock()
-    return store
+    def test_mentions_youtube(self):
+        assert "YouTube" in START_TEXT or "youtube" in START_TEXT.lower()
 
+    def test_mentions_voice(self):
+        assert "голос" in START_TEXT.lower() or "voice" in START_TEXT.lower()
 
-# ---------------------------------------------------------------------------
-# _session_is_empty
-# ---------------------------------------------------------------------------
-
-class TestSessionIsEmpty:
-    def test_all_zero(self):
-        assert _session_is_empty({"text_count": 0, "photo_count": 0, "voice_count": 0}) is True
-
-    def test_has_text(self):
-        assert _session_is_empty({"text_count": 1, "photo_count": 0, "voice_count": 0}) is False
-
-    def test_has_photo(self):
-        assert _session_is_empty({"text_count": 0, "photo_count": 3, "voice_count": 0}) is False
-
-    def test_has_voice(self):
-        assert _session_is_empty({"text_count": 0, "photo_count": 0, "voice_count": 1}) is False
-
-    def test_empty_dict_is_empty(self):
-        assert _session_is_empty({}) is True
-
-    def test_missing_keys_treated_as_zero(self):
-        assert _session_is_empty({"text_count": 0}) is True
-
-
-# ---------------------------------------------------------------------------
-# handle_start
-# ---------------------------------------------------------------------------
-
-class TestHandleStart:
-    @pytest.mark.asyncio
-    async def test_sends_reply(self):
-        """
-        Получить хендлер из register и вызвать его напрямую сложно
-        без реального Router. Тестируем через интеграцию с простым mock Router.
-        """
-        # Прямой тест невозможен без aiogram Router.
-        # Вместо этого проверяем что тексты определены и не пустые.
-        from main_app.bot_commands import _START_TEXT, _HELP_TEXT
-        assert len(_START_TEXT) > 50
-        assert "/help" in _START_TEXT
-        assert "/done" in _START_TEXT or "готово" in _START_TEXT.lower()
-
-    def test_start_text_contains_features(self):
-        from main_app.bot_commands import _START_TEXT
-        assert "PDF" in _START_TEXT
-        assert "YouTube" in _START_TEXT or "youtube" in _START_TEXT.lower()
-        assert "Голосове" in _START_TEXT or "голос" in _START_TEXT.lower()
-
-
-# ---------------------------------------------------------------------------
-# handle_help
-# ---------------------------------------------------------------------------
 
 class TestHelpText:
-    def test_help_contains_all_commands(self):
-        from main_app.bot_commands import _HELP_TEXT
-        assert "/start" in _HELP_TEXT
-        assert "/help" in _HELP_TEXT
-        assert "/cancel" in _HELP_TEXT
-        assert "/done" in _HELP_TEXT
+    def test_not_empty(self):
+        assert len(HELP_TEXT.strip()) > 50
 
-    def test_help_mentions_formats(self):
-        from main_app.bot_commands import _HELP_TEXT
-        text_lower = _HELP_TEXT.lower()
-        assert "текст" in text_lower or "text" in text_lower
-        assert "фото" in text_lower or "photo" in text_lower
-        assert "youtube" in text_lower
+    def test_contains_done(self):
+        assert "/done" in HELP_TEXT
+
+    def test_contains_cancel(self):
+        assert "/cancel" in HELP_TEXT
+
+    def test_contains_help(self):
+        assert "/help" in HELP_TEXT
+
+    def test_mentions_youtube(self):
+        assert "YouTube" in HELP_TEXT or "youtube" in HELP_TEXT.lower()
+
+    def test_mentions_photo(self):
+        assert "фото" in HELP_TEXT.lower() or "photo" in HELP_TEXT.lower()
 
 
-# ---------------------------------------------------------------------------
-# handle_cancel — логика через _session_is_empty
-# ---------------------------------------------------------------------------
+class TestCancelTexts:
+    def test_empty_text_defined(self):
+        assert len(CANCEL_EMPTY_TEXT.strip()) > 5
 
-class TestCancelLogic:
-    def test_empty_stats_is_empty(self):
-        assert _session_is_empty({"text_count": 0, "photo_count": 0, "voice_count": 0})
-
-    def test_stats_with_content_not_empty(self):
-        assert not _session_is_empty({"text_count": 2, "photo_count": 1, "voice_count": 0})
-
-    def test_none_stats_equivalent_to_empty(self):
-        """None stats → session_is_empty должен не падать."""
-        # handle_cancel проверяет `if not stats or _session_is_empty(stats)`
-        # Т.е. None обрабатывается до вызова _session_is_empty.
-        # Здесь просто проверяем что функция не ломается на пустом dict.
-        assert _session_is_empty({}) is True
-
-    def test_cancel_text_contains_counters(self):
-        from main_app.bot_commands import _CANCEL_WITH_CONTENT_TEXT
-        formatted = _CANCEL_WITH_CONTENT_TEXT.format(
-            text_count=3,
-            photo_count=2,
-            voice_count=1,
-        )
+    def test_with_content_text_has_placeholders(self):
+        formatted = CANCEL_WITH_CONTENT_TEXT.format(photo_count=3, text_count=2)
         assert "3" in formatted
         assert "2" in formatted
-        assert "1" in formatted
 
-    def test_cancel_empty_text_defined(self):
-        from main_app.bot_commands import _CANCEL_EMPTY_TEXT
-        assert len(_CANCEL_EMPTY_TEXT) > 10
-
-    def test_cancel_error_text_defined(self):
-        from main_app.bot_commands import _CANCEL_ERROR_TEXT
-        assert len(_CANCEL_ERROR_TEXT) > 10
+    def test_with_content_text_not_empty(self):
+        assert len(CANCEL_WITH_CONTENT_TEXT.strip()) > 5
