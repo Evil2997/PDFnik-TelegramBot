@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.8
-
 FROM python:3.13-slim AS builder
 
 WORKDIR /app
@@ -7,21 +5,20 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    curl \
+ && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --upgrade pip \
-    && pip install --prefix=/install -r requirements.txt
-
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+COPY . .
 
 FROM python:3.13-slim AS runtime
 
 WORKDIR /app
-
-COPY --from=builder /install /usr/local
-
-COPY . .
+COPY --from=builder /app /app
 
 ENV PYTHONUNBUFFERED=1
+ENV PATH="/app/.venv/bin:$PATH"
 
-CMD ["python3", "main.py"]
+CMD ["python", "main.py"]
