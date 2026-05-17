@@ -1,20 +1,19 @@
+# /home/dmitriy/PycharmProjects/Telegram-Bot/main_app/domain/youtube_pdf_builder.py
+# repo: PDFnik-TelegramBot
+
 """
-main_app/domain/youtube_pdf_builder.py
+Builds a PdfOrder for the pdf.generate queue from a YouTube transcript and metadata.
 
-Строит PdfOrder для очереди pdf.generate из YouTube транскрипта и метаданных.
+Pure domain function — no Telegram, no broker, no storage.
+Accepts transcript_text + metadata dict -> returns dict for broker.publish().
 
-Место: domain/ — чистая бизнес-логика.
-Не знает ни про Telegram, ни про broker, ни про storage.
-Принимает данные → возвращает dict для broker.publish().
-
-Структура PDF:
-    [ЗАГОЛОВОК ВИДЕО]            ← heading, только если есть title
-    Канал · Дата · Длительность  ← paragraph, только заполненные части
-    ────────────────────────────
-    [транскрипт]
-    Источник: https://...        ← если есть url
+PDF structure:
+    [VIDEO TITLE]        <- heading, only if title is present
+    Channel · Date · Duration  <- paragraph, only populated parts
+    ----------------------------------------
+    [transcript]
+    Source: https://...  <- if url is present
 """
-from typing import Optional
 
 from pdfnik_contracts.pdf_content import (
     PdfHeadingBlock,
@@ -25,7 +24,7 @@ from pdfnik_contracts.pdf_content import (
 )
 
 
-def _duration_str(duration_sec: Optional[float]) -> str:
+def _duration_str(duration_sec: float | None) -> str:
     if not duration_sec:
         return ""
     total = int(duration_sec)
@@ -36,8 +35,8 @@ def _duration_str(duration_sec: Optional[float]) -> str:
     return f"{m}:{s:02d}"
 
 
-def _date_str(upload_date: Optional[str]) -> str:
-    """'20240315' → '15.03.2024'."""
+def _date_str(upload_date: str | None) -> str:
+    """Converts '20240315' to '15.03.2024'."""
     d = upload_date
     if not d or len(d) != 8:
         return ""
@@ -45,7 +44,7 @@ def _date_str(upload_date: Optional[str]) -> str:
 
 
 def _subtitle_line(meta: dict) -> str:
-    """Формирует строку: 'Канал · 15.03.2024 · 12:34'. Пустые части пропускаются."""
+    """Builds a subtitle line: 'Channel · 15.03.2024 · 12:34'. Empty parts are skipped."""
     parts = []
     if meta.get("channel"):
         parts.append(meta["channel"])
@@ -59,54 +58,41 @@ def _subtitle_line(meta: dict) -> str:
 
 
 def build_youtube_pdf_order(
-        *,
-        chat_id: int,
-        transcript_text: str,
-        metadata: Optional[dict] = None,
+    *,
+    chat_id: int,
+    transcript_text: str,
+    metadata: dict | None = None,
 ) -> dict:
     """
-    Строит payload для очереди pdf.generate.
+    Builds a payload for the pdf.generate queue.
 
-    Аргументы:
-        chat_id         — Telegram chat_id для доставки готового PDF
-        transcript_text — текст транскрипта (уже декодированный, stripped)
-        metadata        — dict из поля youtube_metadata в TxtDoneSuccess,
-                          или None если метаданных нет
+    Args:
+        chat_id         -- Telegram chat_id for PDF delivery
+        transcript_text -- decoded and stripped transcript text
+        metadata        -- dict from youtube_metadata field in TxtDoneSuccess,
+                           or None if metadata is unavailable
 
-    Возвращает dict — результат PdfOrder.model_dump(),
-    готовый для broker.publish(..., queue="pdf.generate").
+    Returns a dict (PdfOrder.model_dump()) ready for broker.publish(queue="pdf.generate").
     """
     meta = metadata or {}
     blocks = []
 
-    # ── Заголовок ──────────────────────────────────────────────────────────
     title = meta.get("title")
     if title:
-        blocks.append(
-            PdfHeadingBlock(content=PdfRichText(text=title, entities=[]))
-        )
+        blocks.append(PdfHeadingBlock(content=PdfRichText(text=title, entities=[])))
 
         subtitle = _subtitle_line(meta)
         if subtitle:
-            blocks.append(
-                PdfParagraphBlock(content=PdfRichText(text=subtitle, entities=[]))
-            )
+            blocks.append(PdfParagraphBlock(content=PdfRichText(text=subtitle, entities=[])))
 
-        blocks.append(
-            PdfParagraphBlock(content=PdfRichText(text="─" * 40, entities=[]))
-        )
+        blocks.append(PdfParagraphBlock(content=PdfRichText(text="-" * 40, entities=[])))
 
-    # ── Транскрипт ─────────────────────────────────────────────────────────
-    # PdfTextBlock → create_pdf нормализует в параграфы/списки автоматически.
     blocks.append(
-        PdfTextBlock(content=PdfRichText(text=transcript_text or "(пустой транскрипт)", entities=[]))
+        PdfTextBlock(content=PdfRichText(text=transcript_text or "(empty transcript)", entities=[]))
     )
 
-    # ── Ссылка на источник ─────────────────────────────────────────────────
     url = meta.get("url")
     if url:
-        blocks.append(
-            PdfParagraphBlock(content=PdfRichText(text=f"\nИсточник: {url}", entities=[]))
-        )
+        blocks.append(PdfParagraphBlock(content=PdfRichText(text=f"\nSource: {url}", entities=[])))
 
     return PdfOrder(chat_id=chat_id, items=blocks).model_dump()

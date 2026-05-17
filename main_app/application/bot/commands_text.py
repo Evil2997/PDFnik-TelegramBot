@@ -2,43 +2,43 @@
 # repo: PDFnik-TelegramBot
 
 START_TEXT = """
-Привет! 👋
+Hi! 👋
 
-Я собираю твои сообщения — текст и фото — и превращаю их в один удобный PDF‑файл.
-Также умею расшифровывать голосовые сообщения и YouTube видео.
+I collect your messages — text and photos — and turn them into a single PDF file.
+I can also transcribe voice messages and YouTube videos.
 
-Отправляй материалы в любом порядке.
-Когда закончишь — напиши команду /done.
+Send content in any order.
+When you're done — type /done.
 
-Готов помочь! 📄✨
+Ready to help! 📄✨
 """
 
 HELP_TEXT = """
-📘 Инструкция
+📘 How to use PDFnik
 
-Этот бот собирает несколько сообщений в один PDF.
+I collect multiple messages and combine them into one PDF.
 
-Как пользоваться:
-1) Отправляй текст или изображения.
-2) Когда закончишь — напиши /done.
-3) Получишь PDF‑файл.
+How it works:
+1) Send text or images.
+2) When done — type /done.
+3) Get your PDF file.
 
-Поддерживаются:
-• ✍️ Текстовые сообщения
-• 🖼️ Фото и скриншоты
-• 🎤 Голосовые сообщения → транскрипт
-• 🎬 YouTube ссылки → транскрипт + PDF
+Supported content:
+• ✍️ Text messages
+• 🖼️ Photos and screenshots
+• 🎤 Voice messages → transcript
+• 🎬 YouTube links → transcript + PDF
 
-Команды:
-/done   — собрать PDF прямо сейчас
-/cancel — сбросить текущую сессию
-/help   — эта инструкция
+Commands:
+/done   — build PDF right now
+/cancel — discard current session
+/help   — this guide
 """
 
-CANCEL_EMPTY_TEXT = "✅ Сессия уже пустая. Отправляй материалы когда будешь готов!"
+CANCEL_EMPTY_TEXT = "✅ Session is already empty. Send content whenever you're ready!"
 
 CANCEL_WITH_CONTENT_TEXT = (
-    "🗑 Сессия сброшена.\n\n"
-    "Было собрано: {photo_count} фото, {text_count} текстовых сообщений.\n"
-    "Все данные удалены — начинай заново когда будешь готов."
+    "🗑 Session cleared.\n\n"
+    "Collected: {photo_count} photos, {text_count} text messages.\n"
+    "All data removed — start fresh whenever you're ready."
 )

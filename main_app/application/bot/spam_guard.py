@@ -1,55 +1,32 @@
-"""
-spam_guard.py
-Telegram-bot side.
+# /home/dmitriy/PycharmProjects/Telegram-Bot/main_app/application/bot/spam_guard.py
+# repo: PDFnik-TelegramBot
 
-Два инструмента:
-1. SpamGuard — rate limiting по chat_id через Redis.
-2. is_ignorable_message() — фильтр мусорных событий (стикеры, реакции и т.д.)
-
-Использование в хендлерах:
-    guard = SpamGuard(redis_client, max_per_minute=10)
-
-    @router.message()
-    async def handle_any(message: Message):
-        if is_ignorable_message(message):
-            return
-
-        if not await guard.allow(message.chat.id):
-            await message.answer("⏳ Зачекайте трохи, надто багато запитів.")
-            return
-
-        # обработка...
-"""
+import contextlib
 import time
-from typing import Optional
 
 from aiogram.types import Message
 
-
-# ---------------------------------------------------------------------------
-# Фильтр мусорных событий
-# ---------------------------------------------------------------------------
-
-_IGNORABLE_CONTENT_TYPES = frozenset({
-    "sticker",
-    "dice",
-    "poll",
-    "venue",
-    "game",
-    "story",
-})
+_IGNORABLE_CONTENT_TYPES = frozenset(
+    {
+        "sticker",
+        "dice",
+        "poll",
+        "venue",
+        "game",
+        "story",
+    }
+)
 
 
 def is_ignorable_message(message: Message) -> bool:
     """
-    Возвращает True если сообщение не требует обработки:
-    - стикеры, кубики, опросы, игры, истории
-    - service messages (пользователь добавлен/удалён, смена названия чата и т.д.)
-    - пустые сообщения без текста, файла, голосового и т.д.
+    Returns True if the message requires no processing:
+    - stickers, dice, polls, games, stories
+    - service messages (member joined/left, title change, etc.)
 
-    Хендлер делает early return при True — изолирует сценарии и не засоряет логи.
+    Handlers do an early return on True to isolate scenarios
+    and avoid polluting logs.
     """
-    # Service messages
     if (
         message.new_chat_members
         or message.left_chat_member
@@ -65,7 +42,6 @@ def is_ignorable_message(message: Message) -> bool:
     ):
         return True
 
-    # Стикеры и прочий контент без полезной нагрузки
     content_type = getattr(message, "content_type", None)
     if content_type in _IGNORABLE_CONTENT_TYPES:
         return True
@@ -73,35 +49,31 @@ def is_ignorable_message(message: Message) -> bool:
     return False
 
 
-# ---------------------------------------------------------------------------
-# Rate limiter
-# ---------------------------------------------------------------------------
-
 class SpamGuard:
     """
-    Sliding window rate limiter на основе Redis sorted set.
+    Sliding window rate limiter backed by Redis sorted sets.
 
-    Алгоритм:
-        Для каждого chat_id храним sorted set с timestamp'ами запросов.
-        Перед каждым запросом:
-        1. Удаляем записи старше window_sec секунд.
-        2. Считаем оставшиеся записи.
-        3. Если >= max_requests — отказываем.
-        4. Иначе — добавляем текущий timestamp и разрешаем.
+    Algorithm:
+        For each chat_id a sorted set stores request timestamps.
+        Before each request:
+        1. Remove entries older than window_sec seconds.
+        2. Count remaining entries.
+        3. If count >= max_requests — deny.
+        4. Otherwise — add current timestamp and allow.
 
-    Преимущества перед fixed window:
-        Нет "двойного burst" на границе окна.
-        Точный подсчёт запросов за последние N секунд.
+    Advantages over fixed window:
+        No double-burst on window boundary.
+        Exact count of requests in the last N seconds.
     """
 
     def __init__(
         self,
-        redis,                          # aioredis / redis.asyncio клиент
+        redis,
         *,
-        max_requests: int = 10,         # максимум запросов за окно
-        window_sec: int = 60,           # размер окна в секундах
-        key_prefix: str = "spam:",      # префикс ключей в Redis
-        ttl_sec: Optional[int] = None,  # TTL на ключ; по умолчанию window_sec * 2
+        max_requests: int = 10,
+        window_sec: int = 60,
+        key_prefix: str = "spam:",
+        ttl_sec: int | None = None,
     ):
         self._redis = redis
         self._max = max_requests
@@ -114,30 +86,25 @@ class SpamGuard:
 
     async def allow(self, chat_id: int) -> bool:
         """
-        Проверяет лимит для chat_id.
-        Возвращает True если запрос разрешён, False если превышен лимит.
+        Checks the rate limit for chat_id.
+        Returns True if the request is allowed, False if the limit is exceeded.
         """
         key = self._key(chat_id)
         now = time.time()
         window_start = now - self._window
 
-        # Используем pipeline для атомарности и минимизации round-trips.
         async with self._redis.pipeline(transaction=True) as pipe:
-            # 1. Удаляем устаревшие записи
             pipe.zremrangebyscore(key, "-inf", window_start)
-            # 2. Считаем актуальные
             pipe.zcard(key)
-            # 3. Добавляем текущий запрос (score = timestamp для уникальности — timestamp + random suffix)
             pipe.zadd(key, {f"{now:.6f}": now})
-            # 4. Обновляем TTL
             pipe.expire(key, self._ttl)
             results = await pipe.execute()
 
-        count_before_add = results[1]  # zcard до zadd
+        count_before_add = results[1]
         return count_before_add < self._max
 
     async def remaining(self, chat_id: int) -> int:
-        """Сколько запросов ещё разрешено в текущем окне."""
+        """Returns how many requests are still allowed in the current window."""
         key = self._key(chat_id)
         now = time.time()
         window_start = now - self._window
@@ -146,5 +113,6 @@ class SpamGuard:
         return max(0, self._max - count)
 
     async def reset(self, chat_id: int) -> None:
-        """Сбросить счётчик для chat_id (например после /cancel)."""
-        await self._redis.delete(self._key(chat_id))
+        """Reset the counter for chat_id (e.g. after /cancel)."""
+        with contextlib.suppress(Exception):
+            await self._redis.delete(self._key(chat_id))

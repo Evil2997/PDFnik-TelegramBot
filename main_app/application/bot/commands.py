@@ -42,7 +42,7 @@ def register_command_handlers(dp: Dispatcher) -> None:
         data = await redis.lrange(key, 0, -1)
 
         if not data:
-            await msg.answer("Пока нечего собирать — отправьте текст или фото 🙂")
+            await msg.answer("Nothing to collect yet — send some text or photos 🙂")
             return
 
         def _to_str(x: object) -> str:

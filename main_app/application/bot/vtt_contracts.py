@@ -1,12 +1,6 @@
-"""
-main_app/application/bot/vtt_contracts.py
+# /home/dmitriy/PycharmProjects/Telegram-Bot/main_app/application/bot/vtt_contracts.py
+# repo: PDFnik-TelegramBot
 
-Изменения относительно предыдущей версии:
-- TxtDoneSuccess: добавлено поле youtube_metadata: dict | None
-  Заполняется pdf-service когда source_type == "youtube".
-  Содержит: url, title, channel, upload_date, duration_sec.
-- parse_txt_done_message: youtube_metadata прокидывается в normalized dict.
-"""
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -39,8 +33,18 @@ class TxtDelivery(BaseModel):
 
 class TxtTranscribeRequest(BaseModel):
     """
-    Канонический payload для txt.transcribe.
+    Canonical payload for the txt.transcribe queue.
+
+    Published by the Telegram bot:
+    {
+      "job_id": "...",
+      "target": {"kind": "storage_key" | "url", "value": "..."},
+      "reply": {"chat_id": 123, "reply_to_message_id": 456},
+      "delivery": {"source_type": "voice", "mode": "text"},
+      "cfg": {}
+    }
     """
+
     model_config = ConfigDict(extra="forbid")
 
     job_id: str = Field(min_length=1)
@@ -62,9 +66,8 @@ class TxtDoneSuccess(BaseModel):
 
     cached: bool | None = None
 
-    # Заполняется pdf-service только при source_type="youtube".
-    # Содержит: url, title, channel, upload_date, duration_sec.
-    # Используется для сборки PDF с заголовком и метаданными видео.
+    # YouTube metadata — populated only when source_type == "youtube".
+    # Used by the bot to build a PDF with title, channel and date.
     youtube_metadata: dict | None = None
 
 
@@ -81,14 +84,9 @@ class TxtDoneError(BaseModel):
     error_code: str | None = None
 
 
-# ---------------------------------------------------------------------------
-# Parsers
-# ---------------------------------------------------------------------------
-
 def _parse_reply(data: dict) -> TxtReply:
     if isinstance(data.get("reply"), dict):
         return TxtReply.model_validate(data["reply"])
-
     return TxtReply(
         chat_id=int(data["chat_id"]),
         reply_to_message_id=data.get("reply_to_message_id"),
@@ -110,7 +108,17 @@ def _parse_delivery(data: dict) -> TxtDelivery:
 
 def parse_txt_done_message(data: dict) -> TxtDoneSuccess | TxtDoneError:
     """
-    Поддерживает канонический txt.done и legacy-поля.
+    Supports both canonical and legacy txt.done payloads.
+
+    Canonical:
+        {"job_id": "...", "status": "ok", "txt_storage_key": "...",
+         "reply": {...}, "delivery": {...}, "cached": false}
+
+    Legacy field aliases:
+        - chat_id / reply_to_message_id
+        - source_type / delivery_mode
+        - result_storage_key / text_storage_key / storage_key
+        - error_message / error
     """
     status = str(data.get("status") or "").strip().lower()
 
@@ -149,6 +157,6 @@ def parse_txt_done_message(data: dict) -> TxtDoneSuccess | TxtDoneError:
         "reply": _parse_reply(data).model_dump(),
         "delivery": _parse_delivery(data).model_dump(),
         "cached": data.get("cached"),
-        "youtube_metadata": data.get("youtube_metadata"),  # None для не-YouTube
+        "youtube_metadata": data.get("youtube_metadata"),
     }
     return TxtDoneSuccess.model_validate(normalized)

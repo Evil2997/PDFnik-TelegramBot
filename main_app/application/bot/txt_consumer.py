@@ -1,19 +1,15 @@
-"""
-main_app/application/bot/txt_consumer.py
+# /home/dmitriy/PycharmProjects/Telegram-Bot/main_app/application/bot/txt_consumer.py
+# repo: PDFnik-TelegramBot
 
-Изменения относительно предыдущей версии:
-- После отправки транскрипта для source_type="youtube" дополнительно
-  публикуем заказ на PDF в очередь pdf.generate.
-  Пользователь получает и текст транскрипта, и PDF с заголовком.
-- Добавлена функция _maybe_publish_youtube_pdf().
-"""
 from aiogram import Bot
 from aiogram.types import BufferedInputFile
 from faststream.rabbit import RabbitBroker
 
-from main_app.application.bot.vtt_contracts import TxtDoneError
-from main_app.application.bot.vtt_contracts import TxtDoneSuccess
-from main_app.application.bot.vtt_contracts import parse_txt_done_message
+from main_app.application.bot.vtt_contracts import (
+    TxtDoneError,
+    TxtDoneSuccess,
+    parse_txt_done_message,
+)
 from main_app.core.logger import logger
 from main_app.domain.youtube_pdf_builder import build_youtube_pdf_order
 from main_app.infrastructure.storage import LocalFileStorage
@@ -21,7 +17,7 @@ from main_app.infrastructure.storage import LocalFileStorage
 _TELEGRAM_TEXT_LIMIT = 4096
 _SHORT_TEXT_LIMIT = 3800
 _VOICE_MAX_TEXT_CHUNKS = 10
-_DOCUMENT_CAPTION = "Транскрипт готов. Отправляю файлом."
+_DOCUMENT_CAPTION = "Transcript ready. Sending as file."
 
 
 def _reply_kwargs(reply_to_message_id: int | None) -> dict:
@@ -33,13 +29,10 @@ def _reply_kwargs(reply_to_message_id: int | None) -> dict:
 def _chunk_text(text: str, chunk_size: int = _SHORT_TEXT_LIMIT) -> list[str]:
     if not text:
         return [""]
-
     safe_chunk_size = min(chunk_size, _TELEGRAM_TEXT_LIMIT - 50)
     chunks: list[str] = []
-
     for index in range(0, len(text), safe_chunk_size):
         chunks.append(text[index : index + safe_chunk_size])
-
     return chunks or [""]
 
 
@@ -56,15 +49,15 @@ def _should_send_as_short_message(source_type: str, transcript_text: str) -> boo
 
 
 async def _send_transcript_document(
-        *,
-        bot: Bot,
-        chat_id: int,
-        reply_to_message_id: int | None,
-        txt_bytes: bytes,
-        job_id: str,
-        source_type: str,
-        target_kind: str,
-        caption: str | None = None,
+    *,
+    bot: Bot,
+    chat_id: int,
+    reply_to_message_id: int | None,
+    txt_bytes: bytes,
+    job_id: str,
+    source_type: str,
+    target_kind: str,
+    caption: str | None = None,
 ) -> bool:
     filename = f"transcript_{job_id}.txt"
     try:
@@ -76,41 +69,47 @@ async def _send_transcript_document(
             **_reply_kwargs(reply_to_message_id),
         )
         logger.info(
-            "event=vtt_send_result_ok job_id=%s chat_id=%s source_type=%s target_kind=%s delivery=document",
-            job_id, chat_id, source_type, target_kind,
+            "event=vtt_send_result_ok job_id=%s chat_id=%s source_type=%s "
+            "target_kind=%s delivery=document",
+            job_id,
+            chat_id,
+            source_type,
+            target_kind,
         )
         return True
     except Exception as exc:
         logger.exception(
-            "event=vtt_send_result_failed job_id=%s chat_id=%s source_type=%s target_kind=%s delivery=document err=%s",
-            job_id, chat_id, source_type, target_kind, exc,
+            "event=vtt_send_result_failed job_id=%s chat_id=%s source_type=%s "
+            "target_kind=%s delivery=document err=%s",
+            job_id,
+            chat_id,
+            source_type,
+            target_kind,
+            exc,
         )
         await bot.send_message(
             chat_id,
-            f"Расшифровка готова, но не смог отправить файл.\njob_id: {job_id}",
+            f"Transcript is ready but could not send the file.\njob_id: {job_id}",
             **_reply_kwargs(reply_to_message_id),
         )
         return False
 
 
 async def _maybe_publish_youtube_pdf(
-        *,
-        broker: RabbitBroker,
-        result: TxtDoneSuccess,
-        transcript_text: str,
+    *,
+    broker: RabbitBroker,
+    result: TxtDoneSuccess,
+    transcript_text: str,
 ) -> None:
     """
-    Если источник — YouTube и транскрипт непустой, публикуем заказ на PDF.
-    Пользователь получит дополнительно PDF с заголовком, каналом и датой.
-
-    Ошибка публикации не критична: транскрипт уже доставлен, просто логируем.
+    If source is YouTube and transcript is non-empty, publish a PDF order.
+    The user receives an additional PDF with title, channel and date.
+    Publish errors are non-fatal: transcript already delivered, exception is logged.
     """
     if result.delivery.source_type != "youtube":
         return
-
     if not transcript_text:
         return
-
     try:
         pdf_order = build_youtube_pdf_order(
             chat_id=result.reply.chat_id,
@@ -118,7 +117,6 @@ async def _maybe_publish_youtube_pdf(
             metadata=result.youtube_metadata,
         )
         await broker.publish(pdf_order, queue="pdf.generate")
-
         title = (result.youtube_metadata or {}).get("title", "")
         logger.info(
             "event=youtube_pdf_published job_id=%s chat_id=%s title=%r",
@@ -136,9 +134,9 @@ async def _maybe_publish_youtube_pdf(
 
 
 def register_txt_done_consumer(
-        broker: RabbitBroker,
-        bot: Bot,
-        storage: LocalFileStorage,
+    broker: RabbitBroker,
+    bot: Bot,
+    storage: LocalFileStorage,
 ) -> None:
     @broker.subscriber("txt.done")
     async def txt_done_consumer(data: dict) -> None:
@@ -156,16 +154,22 @@ def register_txt_done_consumer(
             delivery_mode = parsed.delivery.mode if parsed.delivery else None
 
             logger.error(
-                "event=vtt_done_error job_id=%s chat_id=%s source_type=%s target_kind=%s delivery_mode=%s error_code=%s error=%s",
-                parsed.job_id, chat_id, source_type, target_kind,
-                delivery_mode, parsed.error_code, parsed.error,
+                "event=vtt_done_error job_id=%s chat_id=%s source_type=%s "
+                "target_kind=%s delivery_mode=%s error_code=%s error=%s",
+                parsed.job_id,
+                chat_id,
+                source_type,
+                target_kind,
+                delivery_mode,
+                parsed.error_code,
+                parsed.error,
             )
 
             if chat_id is not None:
                 code_part = f"\ncode: {parsed.error_code}" if parsed.error_code else ""
                 await bot.send_message(
                     chat_id,
-                    f"Не удалось расшифровать.\njob_id: {parsed.job_id}{code_part}",
+                    f"Transcription failed.\njob_id: {parsed.job_id}{code_part}",
                     **_reply_kwargs(reply_to_message_id),
                 )
             return
@@ -178,9 +182,15 @@ def register_txt_done_consumer(
         target_kind = _target_kind_from_source_type(source_type)
 
         logger.info(
-            "event=vtt_done_received job_id=%s chat_id=%s source_type=%s target_kind=%s delivery_mode=%s txt_key=%s cached=%s youtube=%s",
-            result.job_id, chat_id, source_type, target_kind,
-            delivery_mode, result.txt_storage_key, result.cached,
+            "event=vtt_done_received job_id=%s chat_id=%s source_type=%s "
+            "target_kind=%s delivery_mode=%s txt_key=%s cached=%s youtube=%s",
+            result.job_id,
+            chat_id,
+            source_type,
+            target_kind,
+            delivery_mode,
+            result.txt_storage_key,
+            result.cached,
             bool(result.youtube_metadata),
         )
 
@@ -189,18 +199,21 @@ def register_txt_done_consumer(
         except Exception as exc:
             logger.exception(
                 "event=vtt_read_transcript_failed job_id=%s chat_id=%s key=%s err=%s",
-                result.job_id, chat_id, result.txt_storage_key, exc,
+                result.job_id,
+                chat_id,
+                result.txt_storage_key,
+                exc,
             )
             await bot.send_message(
                 chat_id,
-                f"Расшифровка готова, но не смог прочитать результат.\njob_id: {result.job_id}",
+                f"Transcript is ready but could not read the result.\njob_id: {result.job_id}",
                 **_reply_kwargs(reply_to_message_id),
             )
             return
 
         transcript_text = txt_bytes.decode("utf-8", errors="replace").strip()
 
-        # ── Voice: разбиваем на чанки ──────────────────────────────────────
+        # Voice: split into chunks
         if source_type == "voice":
             chunks = _chunk_text(transcript_text)
 
@@ -208,20 +221,26 @@ def register_txt_done_consumer(
                 try:
                     await bot.send_message(
                         chat_id,
-                        "Транскрипт слишком длинный, отправляю файлом.",
+                        "Transcript is too long, sending as file.",
                         **_reply_kwargs(reply_to_message_id),
                     )
                 except Exception as exc:
                     logger.exception(
                         "event=vtt_send_notice_failed job_id=%s chat_id=%s err=%s",
-                        result.job_id, chat_id, exc,
+                        result.job_id,
+                        chat_id,
+                        exc,
                     )
 
                 await _send_transcript_document(
-                    bot=bot, chat_id=chat_id,
+                    bot=bot,
+                    chat_id=chat_id,
                     reply_to_message_id=reply_to_message_id,
-                    txt_bytes=txt_bytes, job_id=result.job_id,
-                    source_type=source_type, target_kind=target_kind, caption=None,
+                    txt_bytes=txt_bytes,
+                    job_id=result.job_id,
+                    source_type=source_type,
+                    target_kind=target_kind,
+                    caption=None,
                 )
                 return
 
@@ -229,51 +248,65 @@ def register_txt_done_consumer(
                 try:
                     await bot.send_message(
                         chat_id,
-                        chunk if chunk else "(пустая расшифровка)",
+                        chunk if chunk else "(empty transcript)",
                         **(_reply_kwargs(reply_to_message_id) if index == 0 else {}),
                     )
                 except Exception as exc:
                     logger.exception(
-                        "event=vtt_send_result_failed job_id=%s chat_id=%s delivery=text idx=%s err=%s",
-                        result.job_id, chat_id, index, exc,
+                        "event=vtt_send_result_failed job_id=%s chat_id=%s "
+                        "delivery=text idx=%s err=%s",
+                        result.job_id,
+                        chat_id,
+                        index,
+                        exc,
                     )
                     await bot.send_message(
                         chat_id,
-                        f"Расшифровка готова, но не смог отправить текст.\njob_id: {result.job_id}",
+                        f"Transcript is ready but could not send text.\njob_id: {result.job_id}",
                         **(_reply_kwargs(reply_to_message_id) if index == 0 else {}),
                     )
                     return
 
             logger.info(
-                "event=vtt_send_result_ok job_id=%s chat_id=%s source_type=%s delivery=text chunks=%s",
-                result.job_id, chat_id, source_type, len(chunks),
+                "event=vtt_send_result_ok job_id=%s chat_id=%s source_type=%s "
+                "delivery=text chunks=%s",
+                result.job_id,
+                chat_id,
+                source_type,
+                len(chunks),
             )
             return
 
-        # ── YouTube / video / audio: короткий текст → message ──────────────
+        # YouTube / video / audio: short text -> message
         if _should_send_as_short_message(source_type, transcript_text):
             try:
                 await bot.send_message(
                     chat_id,
-                    transcript_text if transcript_text else "(пустая расшифровка)",
+                    transcript_text if transcript_text else "(empty transcript)",
                     **_reply_kwargs(reply_to_message_id),
                 )
                 logger.info(
-                    "event=vtt_send_result_ok job_id=%s chat_id=%s source_type=%s delivery=text chunks=1",
-                    result.job_id, chat_id, source_type,
+                    "event=vtt_send_result_ok job_id=%s chat_id=%s "
+                    "source_type=%s delivery=text chunks=1",
+                    result.job_id,
+                    chat_id,
+                    source_type,
                 )
             except Exception as exc:
                 logger.exception(
-                    "event=vtt_send_result_failed job_id=%s chat_id=%s delivery=text idx=0 err=%s",
-                    result.job_id, chat_id, exc,
+                    "event=vtt_send_result_failed job_id=%s chat_id=%s "
+                    "delivery=text idx=0 err=%s",
+                    result.job_id,
+                    chat_id,
+                    exc,
                 )
                 await bot.send_message(
                     chat_id,
-                    f"Расшифровка готова, но не смог отправить текст.\njob_id: {result.job_id}",
+                    f"Transcript is ready but could not send text.\njob_id: {result.job_id}",
                     **_reply_kwargs(reply_to_message_id),
                 )
 
-            # YouTube: дополнительно собираем PDF с заголовком
+            # YouTube: also build a PDF with title and metadata
             await _maybe_publish_youtube_pdf(
                 broker=broker,
                 result=result,
@@ -281,16 +314,19 @@ def register_txt_done_consumer(
             )
             return
 
-        # ── Длинный текст → файл ───────────────────────────────────────────
+        # Long text -> file
         await _send_transcript_document(
-            bot=bot, chat_id=chat_id,
+            bot=bot,
+            chat_id=chat_id,
             reply_to_message_id=reply_to_message_id,
-            txt_bytes=txt_bytes, job_id=result.job_id,
-            source_type=source_type, target_kind=target_kind,
+            txt_bytes=txt_bytes,
+            job_id=result.job_id,
+            source_type=source_type,
+            target_kind=target_kind,
             caption=_DOCUMENT_CAPTION,
         )
 
-        # YouTube: даже если транскрипт ушёл файлом — PDF тоже формируем
+        # YouTube: also build a PDF even when transcript was sent as file
         await _maybe_publish_youtube_pdf(
             broker=broker,
             result=result,

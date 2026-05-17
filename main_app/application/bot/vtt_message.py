@@ -1,3 +1,6 @@
+# /home/dmitriy/PycharmProjects/Telegram-Bot/main_app/application/bot/vtt_message.py
+# repo: PDFnik-TelegramBot
+
 import pathlib
 import re
 import uuid
@@ -8,10 +11,12 @@ from aiogram.types import Audio, Document, Message, Video, Voice
 from faststream.rabbit import RabbitBroker
 from faststream.redis import Redis
 
-from main_app.application.bot.vtt_contracts import TxtDelivery
-from main_app.application.bot.vtt_contracts import TxtReply
-from main_app.application.bot.vtt_contracts import TxtTarget
-from main_app.application.bot.vtt_contracts import TxtTranscribeRequest
+from main_app.application.bot.vtt_contracts import (
+    TxtDelivery,
+    TxtReply,
+    TxtTarget,
+    TxtTranscribeRequest,
+)
 from main_app.core.logger import logger
 from main_app.infrastructure.storage import LocalFileStorage
 
@@ -59,7 +64,9 @@ def _infer_upload_meta(msg: Message) -> tuple[str, str, str]:
     if msg.audio:
         audio: Audio = msg.audio
         mime_type = audio.mime_type or "audio/mpeg"
-        filename = audio.file_name or f"{audio.file_unique_id}{_MIME_DEFAULT_EXT.get(mime_type, '.mp3')}"
+        filename = (
+            audio.file_name or f"{audio.file_unique_id}{_MIME_DEFAULT_EXT.get(mime_type, '.mp3')}"
+        )
         if not _safe_suffix(filename):
             filename = f"{filename}{_MIME_DEFAULT_EXT.get(mime_type, '.mp3')}"
         return "audio", filename, mime_type
@@ -67,7 +74,9 @@ def _infer_upload_meta(msg: Message) -> tuple[str, str, str]:
     if msg.video:
         video: Video = msg.video
         mime_type = video.mime_type or "video/mp4"
-        filename = video.file_name or f"{video.file_unique_id}{_MIME_DEFAULT_EXT.get(mime_type, '.mp4')}"
+        filename = (
+            video.file_name or f"{video.file_unique_id}{_MIME_DEFAULT_EXT.get(mime_type, '.mp4')}"
+        )
         if not _safe_suffix(filename):
             filename = f"{filename}{_MIME_DEFAULT_EXT.get(mime_type, '.mp4')}"
         return "video", filename, mime_type
@@ -76,7 +85,9 @@ def _infer_upload_meta(msg: Message) -> tuple[str, str, str]:
         document: Document = msg.document
         mime_type = document.mime_type or "application/octet-stream"
         source_type = "audio" if mime_type.lower().startswith("audio/") else "video"
-        filename = document.file_name or f"{document.file_unique_id}{_MIME_DEFAULT_EXT.get(mime_type, '')}"
+        filename = (
+            document.file_name or f"{document.file_unique_id}{_MIME_DEFAULT_EXT.get(mime_type, '')}"
+        )
         if not _safe_suffix(filename):
             filename = f"{filename}{_MIME_DEFAULT_EXT.get(mime_type, '.bin')}"
         return source_type, filename, mime_type
@@ -135,31 +146,25 @@ async def _acquire_dedupe_lock(redis: Redis, chat_id: int, message_id: int) -> b
 
 
 def register_vtt_message_handlers(
-        dp: Dispatcher,
-        bot: Bot,
-        storage: LocalFileStorage,
-        broker: RabbitBroker,
-        redis: Redis,
+    dp: Dispatcher,
+    bot: Bot,
+    storage: LocalFileStorage,
+    broker: RabbitBroker,
+    redis: Redis,
 ) -> None:
     async def _publish_job(
-            *,
-            job_id: str,
-            target_kind: str,
-            target_value: str,
-            chat_id: int,
-            reply_to_message_id: int | None,
-            source_type: str,
+        *,
+        job_id: str,
+        target_kind: str,
+        target_value: str,
+        chat_id: int,
+        reply_to_message_id: int | None,
+        source_type: str,
     ) -> bool:
         payload = TxtTranscribeRequest(
             job_id=job_id,
-            target=TxtTarget(
-                kind=target_kind,
-                value=target_value,
-            ),
-            reply=TxtReply(
-                chat_id=chat_id,
-                reply_to_message_id=reply_to_message_id,
-            ),
+            target=TxtTarget(kind=target_kind, value=target_value),
+            reply=TxtReply(chat_id=chat_id, reply_to_message_id=reply_to_message_id),
             delivery=TxtDelivery(
                 source_type=source_type,
                 mode=_resolve_delivery_mode(source_type),
@@ -170,7 +175,8 @@ def register_vtt_message_handlers(
         try:
             await broker.publish(payload.model_dump(exclude_none=True), queue="txt.transcribe")
             logger.info(
-                "event=vtt_publish_ok job_id=%s chat_id=%s source_type=%s target_kind=%s target_value=%s delivery_mode=%s",
+                "event=vtt_publish_ok job_id=%s chat_id=%s source_type=%s "
+                "target_kind=%s target_value=%s delivery_mode=%s",
                 job_id,
                 chat_id,
                 source_type,
@@ -181,7 +187,8 @@ def register_vtt_message_handlers(
             return True
         except Exception as exc:
             logger.exception(
-                "event=vtt_publish_failed job_id=%s chat_id=%s source_type=%s target_kind=%s delivery_mode=%s err=%s",
+                "event=vtt_publish_failed job_id=%s chat_id=%s source_type=%s "
+                "target_kind=%s delivery_mode=%s err=%s",
                 job_id,
                 chat_id,
                 source_type,
@@ -198,7 +205,8 @@ def register_vtt_message_handlers(
         is_new_message = await _acquire_dedupe_lock(redis, chat_id, reply_to_message_id)
         if not is_new_message:
             logger.info(
-                "event=vtt_duplicate_ignored chat_id=%s message_id=%s source_type=upload target_kind=storage_key",
+                "event=vtt_duplicate_ignored chat_id=%s message_id=%s "
+                "source_type=upload target_kind=storage_key",
                 chat_id,
                 reply_to_message_id,
             )
@@ -211,13 +219,14 @@ def register_vtt_message_handlers(
             file_bytes = await _download_media_bytes(bot, msg)
         except Exception as exc:
             logger.exception(
-                "event=vtt_download_failed job_id=%s chat_id=%s source_type=%s target_kind=storage_key err=%s",
+                "event=vtt_download_failed job_id=%s chat_id=%s "
+                "source_type=%s target_kind=storage_key err=%s",
                 job_id,
                 chat_id,
                 source_type,
                 exc,
             )
-            await msg.answer("Не смог скачать файл из Telegram. Попробуйте ещё раз.")
+            await msg.answer("Could not download file from Telegram. Please try again.")
             return
 
         try:
@@ -229,13 +238,14 @@ def register_vtt_message_handlers(
             )
         except Exception as exc:
             logger.exception(
-                "event=vtt_storage_save_failed job_id=%s chat_id=%s source_type=%s target_kind=storage_key err=%s",
+                "event=vtt_storage_save_failed job_id=%s chat_id=%s "
+                "source_type=%s target_kind=storage_key err=%s",
                 job_id,
                 chat_id,
                 source_type,
                 exc,
             )
-            await msg.answer("Не смог сохранить файл. Попробуйте ещё раз.")
+            await msg.answer("Could not save file. Please try again.")
             return
 
         is_published = await _publish_job(
@@ -248,12 +258,11 @@ def register_vtt_message_handlers(
         )
         if not is_published:
             await msg.answer(
-                "Не смог отправить задачу на расшифровку. Попробуйте позже.\n"
-                f"job_id: {job_id}"
+                "Could not submit transcription job. Please try later.\n" f"job_id: {job_id}"
             )
             return
 
-        await msg.answer("Принял, расшифровываю…")
+        await msg.answer("Got it, transcribing...")
 
     async def _handle_youtube_link(msg: Message, url: str) -> None:
         chat_id = msg.chat.id
@@ -262,7 +271,8 @@ def register_vtt_message_handlers(
         is_new_message = await _acquire_dedupe_lock(redis, chat_id, reply_to_message_id)
         if not is_new_message:
             logger.info(
-                "event=vtt_duplicate_ignored chat_id=%s message_id=%s source_type=youtube target_kind=url",
+                "event=vtt_duplicate_ignored chat_id=%s message_id=%s "
+                "source_type=youtube target_kind=url",
                 chat_id,
                 reply_to_message_id,
             )
@@ -280,22 +290,20 @@ def register_vtt_message_handlers(
         )
         if not is_published:
             await msg.answer(
-                "Не смог отправить YouTube на расшифровку. Попробуйте позже.\n"
+                "Could not submit YouTube for transcription. Please try later.\n"
                 f"job_id: {job_id}"
             )
             return
 
-        await msg.answer("Принял, расшифровываю…")
+        await msg.answer("Got it, transcribing...")
 
     @dp.message(F.text)
     async def on_text_youtube(msg: Message) -> None:
         if not msg.text:
             return
-
         youtube_url = _extract_first_youtube_url(msg.text)
         if not youtube_url:
             return
-
         await _handle_youtube_link(msg, youtube_url)
 
     @dp.message(F.voice)
@@ -313,7 +321,8 @@ def register_vtt_message_handlers(
     @dp.message(F.document)
     async def on_document(msg: Message) -> None:
         if not _is_supported_document(msg):
-            await msg.answer("Этот документ не похож на аудио/видео. Пришлите voice/audio/video 🙂")
+            await msg.answer(
+                "This document does not look like audio/video. Please send a voice/audio/video file 🙂"
+            )
             return
-
         await _handle_upload(msg)
