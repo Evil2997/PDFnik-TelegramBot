@@ -1,6 +1,22 @@
+"""
+Хендлеры команд /start, /help, /cancel.
+
+Регистрация в main.py / router setup:
+    from bot_commands import register_command_handlers
+    register_command_handlers(router, session_store)
+
+session_store — любой объект с методами:
+    async def clear(chat_id: int) -> None
+    async def get_stats(chat_id: int) -> dict | None
+
+Это позволяет передавать Redis-based или in-memory store
+без жёсткой зависимости.
+"""
 import json
+from typing import Protocol
 
 from aiogram import Dispatcher
+from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
@@ -70,3 +86,60 @@ def register_command_handlers(dp: Dispatcher) -> None:
         )
 
         await redis.delete(key)
+
+# ---------------------------------------------------------------------------
+# Protocol для session store (dependency inversion)
+# ---------------------------------------------------------------------------
+
+class SessionStore(Protocol):
+    async def clear(self, chat_id: int) -> None: ...
+    async def get_stats(self, chat_id: int) -> dict | None: ...
+
+# ---------------------------------------------------------------------------
+# Registration
+# ---------------------------------------------------------------------------
+
+def register_command_handlers(router: Router, session_store: SessionStore) -> None:
+    """
+    Реєструє хендлери /start, /help, /cancel на переданому router.
+    Викликати один раз при старті бота.
+    """
+
+    @router.message(Command("start"))
+    async def handle_start(message: Message) -> None:
+        await message.answer(_START_TEXT, parse_mode=None)
+
+    @router.message(Command("help"))
+    async def handle_help(message: Message) -> None:
+        await message.answer(_HELP_TEXT, parse_mode=None)
+
+    @router.message(Command("cancel"))
+    async def handle_cancel(message: Message) -> None:
+        chat_id = message.chat.id
+
+        try:
+            stats = await session_store.get_stats(chat_id)
+
+            if not stats or _session_is_empty(stats):
+                await message.answer(_CANCEL_EMPTY_TEXT)
+                return
+
+            await session_store.clear(chat_id)
+
+            text = _CANCEL_WITH_CONTENT_TEXT.format(
+                text_count=stats.get("text_count", 0),
+                photo_count=stats.get("photo_count", 0),
+                voice_count=stats.get("voice_count", 0),
+            )
+            await message.answer(text)
+
+        except Exception:
+            await message.answer(_CANCEL_ERROR_TEXT)
+
+
+def _session_is_empty(stats: dict) -> bool:
+    return (
+        stats.get("text_count", 0) == 0
+        and stats.get("photo_count", 0) == 0
+        and stats.get("voice_count", 0) == 0
+    )
