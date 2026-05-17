@@ -21,7 +21,6 @@ from main_app.infrastructure.redis_connector import redis
 
 
 def register_command_handlers(dp: Dispatcher) -> None:
-
     @dp.message(Command("start"))
     async def command_start(msg: Message) -> None:
         logger.info(f"/start from chat {msg.chat.id}")

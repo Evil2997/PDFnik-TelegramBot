@@ -1,7 +1,6 @@
 # /home/dmitriy/PycharmProjects/Telegram-Bot/tests/unit/test_vtt_contracts.py
 # repo: PDFnik-TelegramBot
 
-import pytest
 
 from main_app.application.bot.vtt_contracts import (
     TxtDoneError,
@@ -11,10 +10,10 @@ from main_app.application.bot.vtt_contracts import (
     parse_txt_done_message,
 )
 
-
 # ---------------------------------------------------------------------------
 # _parse_reply
 # ---------------------------------------------------------------------------
+
 
 class TestParseReply:
     def test_canonical_reply_dict(self):
@@ -39,6 +38,7 @@ class TestParseReply:
 # ---------------------------------------------------------------------------
 # _parse_delivery
 # ---------------------------------------------------------------------------
+
 
 class TestParseDelivery:
     def test_canonical_delivery_dict(self):
@@ -67,6 +67,7 @@ class TestParseDelivery:
 # ---------------------------------------------------------------------------
 # parse_txt_done_message — success
 # ---------------------------------------------------------------------------
+
 
 class TestParseTxtDoneSuccess:
     def _ok(self, **kwargs) -> dict:
@@ -108,7 +109,8 @@ class TestParseTxtDoneSuccess:
 
     def test_legacy_result_storage_key(self):
         data = {
-            "job_id": "j1", "status": "ok",
+            "job_id": "j1",
+            "status": "ok",
             "result_storage_key": "txts/legacy.txt",
             "reply": {"chat_id": 1},
             "delivery": {"source_type": "voice", "mode": "text"},
@@ -121,6 +123,7 @@ class TestParseTxtDoneSuccess:
 # ---------------------------------------------------------------------------
 # parse_txt_done_message — error
 # ---------------------------------------------------------------------------
+
 
 class TestParseTxtDoneError:
     def _err(self, **kwargs) -> dict:

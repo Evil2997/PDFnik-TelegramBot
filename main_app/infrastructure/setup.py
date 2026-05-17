@@ -3,7 +3,7 @@ from main_app.application.bot.pdf_consumer import register_pdf_send_consumer
 from main_app.application.bot.txt_consumer import register_txt_done_consumer
 from main_app.application.bot.user_message import register_user_message_handlers
 from main_app.application.bot.vtt_message import register_vtt_message_handlers
-from main_app.infrastructure.bot_factory import dp, bot
+from main_app.infrastructure.bot_factory import bot, dp
 from main_app.infrastructure.rabbit_connector import broker
 from main_app.infrastructure.redis_connector import redis
 from main_app.infrastructure.storage import storage

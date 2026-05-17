@@ -4,16 +4,17 @@
 """
 Тесты для SpamGuard и is_ignorable_message.
 """
+
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from main_app.application.bot.spam_guard import SpamGuard, is_ignorable_message
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_redis_mock(zcard_result: int = 0) -> MagicMock:
     pipe = AsyncMock()
@@ -36,12 +37,18 @@ def _make_redis_mock(zcard_result: int = 0) -> MagicMock:
 def _make_message(**kwargs) -> MagicMock:
     msg = MagicMock()
     defaults = {
-        "new_chat_members": None, "left_chat_member": None,
-        "new_chat_title": None, "new_chat_photo": None,
-        "delete_chat_photo": None, "group_chat_created": None,
-        "supergroup_chat_created": None, "channel_chat_created": None,
-        "migrate_to_chat_id": None, "migrate_from_chat_id": None,
-        "pinned_message": None, "content_type": "text",
+        "new_chat_members": None,
+        "left_chat_member": None,
+        "new_chat_title": None,
+        "new_chat_photo": None,
+        "delete_chat_photo": None,
+        "group_chat_created": None,
+        "supergroup_chat_created": None,
+        "channel_chat_created": None,
+        "migrate_to_chat_id": None,
+        "migrate_from_chat_id": None,
+        "pinned_message": None,
+        "content_type": "text",
     }
     defaults.update(kwargs)
     for key, value in defaults.items():
@@ -52,6 +59,7 @@ def _make_message(**kwargs) -> MagicMock:
 # ---------------------------------------------------------------------------
 # is_ignorable_message
 # ---------------------------------------------------------------------------
+
 
 class TestIsIgnorableMessage:
     def test_text_not_ignored(self):
@@ -86,6 +94,7 @@ class TestIsIgnorableMessage:
 # SpamGuard.allow
 # ---------------------------------------------------------------------------
 
+
 class TestSpamGuardAllow:
     @pytest.mark.asyncio
     async def test_allows_within_limit(self):
@@ -113,6 +122,7 @@ class TestSpamGuardAllow:
 # ---------------------------------------------------------------------------
 # SpamGuard.reset
 # ---------------------------------------------------------------------------
+
 
 class TestSpamGuardReset:
     @pytest.mark.asyncio

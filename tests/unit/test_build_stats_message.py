@@ -1,14 +1,13 @@
 # /home/dmitriy/PycharmProjects/Telegram-Bot/tests/unit/test_build_stats_message.py
 # repo: PDFnik-TelegramBot
 
-import pytest
 
 from main_app.domain.build_stats_message import _plural_ru, build_stats_message
-
 
 # ---------------------------------------------------------------------------
 # _plural_ru
 # ---------------------------------------------------------------------------
+
 
 class TestPluralRu:
     def test_one(self):
@@ -39,6 +38,7 @@ class TestPluralRu:
 # ---------------------------------------------------------------------------
 # build_stats_message
 # ---------------------------------------------------------------------------
+
 
 class TestBuildStatsMessage:
     def test_all_zero_returns_fallback(self):

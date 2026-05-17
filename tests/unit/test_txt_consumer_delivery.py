@@ -1,7 +1,6 @@
 # /home/dmitriy/PycharmProjects/Telegram-Bot/tests/unit/test_txt_consumer_delivery.py
 # repo: PDFnik-TelegramBot
 
-import pytest
 
 from main_app.application.bot.txt_consumer import (
     _SHORT_TEXT_LIMIT,
@@ -12,10 +11,10 @@ from main_app.application.bot.txt_consumer import (
     _target_kind_from_source_type,
 )
 
-
 # ---------------------------------------------------------------------------
 # _reply_kwargs
 # ---------------------------------------------------------------------------
+
 
 class TestReplyKwargs:
     def test_with_id(self):
@@ -31,6 +30,7 @@ class TestReplyKwargs:
 # ---------------------------------------------------------------------------
 # _target_kind_from_source_type
 # ---------------------------------------------------------------------------
+
 
 class TestTargetKind:
     def test_youtube_is_url(self):
@@ -52,6 +52,7 @@ class TestTargetKind:
 # ---------------------------------------------------------------------------
 # _should_send_as_short_message
 # ---------------------------------------------------------------------------
+
 
 class TestShouldSendAsShortMessage:
     def _short(self) -> str:
@@ -86,6 +87,7 @@ class TestShouldSendAsShortMessage:
 # ---------------------------------------------------------------------------
 # _chunk_text
 # ---------------------------------------------------------------------------
+
 
 class TestChunkText:
     def test_empty_returns_one_empty_string(self):

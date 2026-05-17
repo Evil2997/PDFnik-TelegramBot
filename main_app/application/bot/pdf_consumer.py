@@ -8,9 +8,9 @@ from main_app.infrastructure.storage import LocalFileStorage
 
 
 def register_pdf_send_consumer(
-        broker: RabbitBroker,
-        bot: Bot,
-        storage: LocalFileStorage,
+    broker: RabbitBroker,
+    bot: Bot,
+    storage: LocalFileStorage,
 ) -> None:
     @broker.subscriber("pdf.send")
     async def pdf_consumer(data: dict):

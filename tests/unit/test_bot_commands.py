@@ -8,7 +8,6 @@
 - тексты команд
 - CANCEL_WITH_CONTENT_TEXT форматирование
 """
-import pytest
 
 from main_app.application.bot.commands_text import (
     CANCEL_EMPTY_TEXT,

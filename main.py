@@ -5,7 +5,7 @@ import asyncio
 
 from main_app.core.constants import FILES_ROOT
 from main_app.core.logger import logger
-from main_app.infrastructure.bot_factory import dp, bot
+from main_app.infrastructure.bot_factory import bot, dp
 from main_app.infrastructure.rabbit_connector import broker
 from main_app.infrastructure.setup import setup_bot_handlers_and_subscribers
 
