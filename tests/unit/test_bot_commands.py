@@ -2,16 +2,17 @@
 # repo: PDFnik-TelegramBot
 
 """
-Тесты для commands.py и commands_text.py.
+Tests for commands.py and commands_text.py.
 
-Тестируем только чистые вещи без aiogram:
-- тексты команд
-- CANCEL_WITH_CONTENT_TEXT форматирование
+Tests only pure things without aiogram:
+- command texts
+- CANCEL text formatting
 """
 
 from main_app.application.bot.commands_text import (
+    CANCEL_CONFIRM_TEXT,
+    CANCEL_CONFIRMED_TEXT,
     CANCEL_EMPTY_TEXT,
-    CANCEL_WITH_CONTENT_TEXT,
     HELP_TEXT,
     START_TEXT,
 )
@@ -31,7 +32,7 @@ class TestStartText:
         assert "YouTube" in START_TEXT or "youtube" in START_TEXT.lower()
 
     def test_mentions_voice(self):
-        assert "голос" in START_TEXT.lower() or "voice" in START_TEXT.lower()
+        assert "voice" in START_TEXT.lower() or "голос" in START_TEXT.lower()
 
 
 class TestHelpText:
@@ -51,17 +52,25 @@ class TestHelpText:
         assert "YouTube" in HELP_TEXT or "youtube" in HELP_TEXT.lower()
 
     def test_mentions_photo(self):
-        assert "фото" in HELP_TEXT.lower() or "photo" in HELP_TEXT.lower()
+        assert "photo" in HELP_TEXT.lower() or "фото" in HELP_TEXT.lower()
 
 
 class TestCancelTexts:
     def test_empty_text_defined(self):
         assert len(CANCEL_EMPTY_TEXT.strip()) > 5
 
-    def test_with_content_text_has_placeholders(self):
-        formatted = CANCEL_WITH_CONTENT_TEXT.format(photo_count=3, text_count=2)
+    def test_confirm_text_has_placeholders(self):
+        formatted = CANCEL_CONFIRM_TEXT.format(photo_count=3, text_count=2)
         assert "3" in formatted
         assert "2" in formatted
 
-    def test_with_content_text_not_empty(self):
-        assert len(CANCEL_WITH_CONTENT_TEXT.strip()) > 5
+    def test_confirmed_text_has_placeholders(self):
+        formatted = CANCEL_CONFIRMED_TEXT.format(photo_count=1, text_count=5)
+        assert "1" in formatted
+        assert "5" in formatted
+
+    def test_confirm_text_mentions_cancel(self):
+        assert "/cancel" in CANCEL_CONFIRM_TEXT
+
+    def test_confirmed_text_not_empty(self):
+        assert len(CANCEL_CONFIRMED_TEXT.strip()) > 5
