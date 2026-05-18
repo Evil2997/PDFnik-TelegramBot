@@ -2,7 +2,15 @@
 # repo: PDFnik-TelegramBot
 
 """
-Тесты для SpamGuard и is_ignorable_message.
+Tests for SpamGuard and is_ignorable_message.
+
+Note on mocking redis pipeline:
+  Inside async with redis.pipeline() as pipe, the queueing methods
+  (zremrangebyscore, zcard, zadd, expire) are SYNCHRONOUS — they return
+  the pipe itself. Only pipe.execute() is awaited.
+  Therefore we use MagicMock for queueing methods and AsyncMock only
+  for execute(). Using AsyncMock everywhere triggers "coroutine was
+  never awaited" warnings.
 """
 
 from unittest.mock import AsyncMock, MagicMock
@@ -17,11 +25,13 @@ from main_app.application.bot.spam_guard import SpamGuard, is_ignorable_message
 
 
 def _make_redis_mock(zcard_result: int = 0) -> MagicMock:
-    pipe = AsyncMock()
-    pipe.zremrangebyscore = AsyncMock()
-    pipe.zcard = AsyncMock()
-    pipe.zadd = AsyncMock()
-    pipe.expire = AsyncMock()
+    pipe = MagicMock()
+    # Queueing methods are synchronous in redis-py async pipeline.
+    pipe.zremrangebyscore = MagicMock()
+    pipe.zcard = MagicMock()
+    pipe.zadd = MagicMock()
+    pipe.expire = MagicMock()
+    # Only execute() is awaited.
     pipe.execute = AsyncMock(return_value=[0, zcard_result, 1, True])
     pipe.__aenter__ = AsyncMock(return_value=pipe)
     pipe.__aexit__ = AsyncMock(return_value=False)
