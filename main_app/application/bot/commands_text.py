@@ -37,8 +37,19 @@ Commands:
 
 CANCEL_EMPTY_TEXT = "✅ Session is already empty. Send content whenever you're ready!"
 
-CANCEL_WITH_CONTENT_TEXT = (
+CANCEL_CONFIRM_TEXT = (
+    "⚠️ Are you sure you want to discard the session?\n\n"
+    "Collected: {photo_count} photos, {text_count} text messages.\n\n"
+    "Type /cancel again to confirm, or keep sending to continue."
+)
+
+CANCEL_CONFIRMED_TEXT = (
     "🗑 Session cleared.\n\n"
     "Collected: {photo_count} photos, {text_count} text messages.\n"
     "All data removed — start fresh whenever you're ready."
+)
+
+CANCEL_EXPIRED_TEXT = (
+    "✅ Cancellation timed out — your session is still active.\n"
+    "Type /cancel again if you want to discard it."
 )
