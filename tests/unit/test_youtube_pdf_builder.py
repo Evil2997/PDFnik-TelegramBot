@@ -1,7 +1,7 @@
 """
 tests/unit/test_youtube_pdf_builder.py
 
-Тесты для main_app/domain/youtube_pdf_builder.py
+Tests for main_app/domain/youtube_pdf_builder.py
 """
 
 import sys
@@ -50,7 +50,7 @@ def _setup_stubs() -> None:
             self.items = items
 
         def model_dump(self) -> dict:
-            return {"chat_id": self.chat_id, "items": []}
+            return {"chat_id": self.chat_id, "items": self.items}
 
     pc.PdfRichText = _RT
     pc.PdfTextBlock = _PdfTextBlock
@@ -173,3 +173,48 @@ class TestBuildYoutubePdfOrder:
     def test_chat_id_preserved(self):
         result = build_youtube_pdf_order(chat_id=42, transcript_text="text")
         assert result["chat_id"] == 42
+
+    def test_summary_inserts_heading_and_paragraph(self):
+        result = build_youtube_pdf_order(
+            chat_id=1,
+            transcript_text="Transcript.",
+            metadata={"title": "My Video"},
+            summary="This is the summary.",
+        )
+        items = result["items"]
+        texts = [b.content.text for b in items]
+        assert "Summary" in texts
+        assert "This is the summary." in texts
+
+    def test_summary_block_appears_before_transcript(self):
+        result = build_youtube_pdf_order(
+            chat_id=1,
+            transcript_text="Transcript text.",
+            metadata={"title": "My Video"},
+            summary="Short summary.",
+        )
+        items = result["items"]
+        texts = [b.content.text for b in items]
+        summary_idx = texts.index("Short summary.")
+        transcript_idx = texts.index("Transcript text.")
+        assert summary_idx < transcript_idx
+
+    def test_no_summary_no_summary_blocks(self):
+        result = build_youtube_pdf_order(
+            chat_id=1,
+            transcript_text="Transcript.",
+            metadata={"title": "My Video"},
+        )
+        items = result["items"]
+        texts = [b.content.text for b in items]
+        assert "Summary" not in texts
+
+    def test_empty_summary_no_summary_blocks(self):
+        result = build_youtube_pdf_order(
+            chat_id=1,
+            transcript_text="Transcript.",
+            summary="",
+        )
+        items = result["items"]
+        texts = [b.content.text for b in items]
+        assert "Summary" not in texts

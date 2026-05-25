@@ -115,6 +115,7 @@ async def _maybe_publish_youtube_pdf(
             chat_id=result.reply.chat_id,
             transcript_text=transcript_text,
             metadata=result.youtube_metadata,
+            summary=result.summary,
         )
         await broker.publish(pdf_order, queue="pdf.generate")
         title = (result.youtube_metadata or {}).get("title", "")

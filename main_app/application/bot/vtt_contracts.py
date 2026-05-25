@@ -67,8 +67,10 @@ class TxtDoneSuccess(BaseModel):
     cached: bool | None = None
 
     # YouTube metadata — populated only when source_type == "youtube".
-    # Used by the bot to build a PDF with title, channel and date.
     youtube_metadata: dict | None = None
+
+    # LLM-generated summary — populated when backend has a summary provider configured.
+    summary: str | None = None
 
 
 class TxtDoneError(BaseModel):
@@ -158,5 +160,6 @@ def parse_txt_done_message(data: dict) -> TxtDoneSuccess | TxtDoneError:
         "delivery": _parse_delivery(data).model_dump(),
         "cached": data.get("cached"),
         "youtube_metadata": data.get("youtube_metadata"),
+        "summary": data.get("summary"),
     }
     return TxtDoneSuccess.model_validate(normalized)

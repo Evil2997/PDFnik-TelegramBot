@@ -62,6 +62,7 @@ def build_youtube_pdf_order(
     chat_id: int,
     transcript_text: str,
     metadata: dict | None = None,
+    summary: str | None = None,
 ) -> dict:
     """
     Builds a payload for the pdf.generate queue.
@@ -71,6 +72,7 @@ def build_youtube_pdf_order(
         transcript_text -- decoded and stripped transcript text
         metadata        -- dict from youtube_metadata field in TxtDoneSuccess,
                            or None if metadata is unavailable
+        summary         -- LLM-generated summary to insert before the transcript, or None
 
     Returns a dict (PdfOrder.model_dump()) ready for broker.publish(queue="pdf.generate").
     """
@@ -85,6 +87,11 @@ def build_youtube_pdf_order(
         if subtitle:
             blocks.append(PdfParagraphBlock(content=PdfRichText(text=subtitle, entities=[])))
 
+        blocks.append(PdfParagraphBlock(content=PdfRichText(text="-" * 40, entities=[])))
+
+    if summary:
+        blocks.append(PdfHeadingBlock(content=PdfRichText(text="Summary", entities=[])))
+        blocks.append(PdfParagraphBlock(content=PdfRichText(text=summary, entities=[])))
         blocks.append(PdfParagraphBlock(content=PdfRichText(text="-" * 40, entities=[])))
 
     blocks.append(
