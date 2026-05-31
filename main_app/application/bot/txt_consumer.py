@@ -162,6 +162,27 @@ def register_txt_done_consumer(
                 exc,
             )
 
+    @broker.subscriber("txt.cache_summary")
+    async def txt_cache_summary_consumer(data: dict) -> None:
+        chat_id = data.get("chat_id")
+        cached_count = data.get("cached_count", 0)
+        total = data.get("total", 0)
+        if not chat_id:
+            return
+        try:
+            await bot.send_message(
+                chat_id,
+                f"Загружено из кеша: {cached_count} из {total} видео.",
+            )
+        except Exception as exc:
+            logger.warning(
+                "event=cache_summary_send_failed chat_id=%s cached=%s/%s err=%s",
+                chat_id,
+                cached_count,
+                total,
+                exc,
+            )
+
     @broker.subscriber("txt.done")
     async def txt_done_consumer(data: dict) -> None:
         try:
