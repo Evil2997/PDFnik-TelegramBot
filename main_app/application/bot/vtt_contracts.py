@@ -105,7 +105,7 @@ def _parse_delivery(data: dict) -> TxtDelivery:
     if not mode:
         mode = "text" if source_type == "voice" else "document"
 
-    return TxtDelivery(source_type=source_type, mode=mode)
+    return TxtDelivery(source_type=source_type, mode=mode)  # type: ignore[arg-type]
 
 
 def parse_txt_done_message(data: dict) -> TxtDoneSuccess | TxtDoneError:

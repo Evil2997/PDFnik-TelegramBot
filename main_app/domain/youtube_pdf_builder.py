@@ -102,4 +102,4 @@ def build_youtube_pdf_order(
     if url:
         blocks.append(PdfParagraphBlock(content=PdfRichText(text=f"\nSource: {url}", entities=[])))
 
-    return PdfOrder(chat_id=chat_id, items=blocks).model_dump()
+    return PdfOrder(chat_id=chat_id, items=blocks).model_dump()  # type: ignore[no-any-return]

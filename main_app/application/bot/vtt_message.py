@@ -12,6 +12,9 @@ from faststream.rabbit import RabbitBroker
 from faststream.redis import Redis
 
 from main_app.application.bot.vtt_contracts import (
+    DeliveryMode,
+    SourceType,
+    TargetKind,
     TxtDelivery,
     TxtReply,
     TxtTarget,
@@ -53,7 +56,7 @@ def _safe_suffix(filename: str) -> str:
     return suffix if suffix else ""
 
 
-def _infer_upload_meta(msg: Message) -> tuple[str, str, str]:
+def _infer_upload_meta(msg: Message) -> tuple[SourceType, str, str]:
     if msg.voice:
         voice: Voice = msg.voice
         mime_type = voice.mime_type or "audio/ogg"
@@ -84,7 +87,7 @@ def _infer_upload_meta(msg: Message) -> tuple[str, str, str]:
     if msg.document:
         document: Document = msg.document
         mime_type = document.mime_type or "application/octet-stream"
-        source_type = "audio" if mime_type.lower().startswith("audio/") else "video"
+        source_type: SourceType = "audio" if mime_type.lower().startswith("audio/") else "video"
         filename = (
             document.file_name or f"{document.file_unique_id}{_MIME_DEFAULT_EXT.get(mime_type, '')}"
         )
@@ -95,13 +98,15 @@ def _infer_upload_meta(msg: Message) -> tuple[str, str, str]:
     return "audio", "file.bin", "application/octet-stream"
 
 
-def _resolve_delivery_mode(source_type: str) -> str:
+def _resolve_delivery_mode(source_type: str) -> DeliveryMode:
     return "text" if source_type == "voice" else "document"
 
 
 async def _download_media_bytes(bot: Bot, msg: Message) -> bytes:
     buffer = BytesIO()
-    await bot.download(msg.voice or msg.audio or msg.video or msg.document, destination=buffer)
+    file_obj = msg.voice or msg.audio or msg.video or msg.document
+    assert file_obj is not None
+    await bot.download(file_obj, destination=buffer)
     return buffer.getvalue()
 
 
@@ -155,11 +160,11 @@ def register_vtt_message_handlers(
     async def _publish_job(
         *,
         job_id: str,
-        target_kind: str,
+        target_kind: TargetKind,
         target_value: str,
         chat_id: int,
         reply_to_message_id: int | None,
-        source_type: str,
+        source_type: SourceType,
     ) -> bool:
         payload = TxtTranscribeRequest(
             job_id=job_id,
@@ -297,7 +302,7 @@ def register_vtt_message_handlers(
 
         await msg.answer("Got it, transcribing...")
 
-    @dp.message(F.text)
+    @dp.message(F.text.regexp(_YOUTUBE_URL_RE))
     async def on_text_youtube(msg: Message) -> None:
         if not msg.text:
             return

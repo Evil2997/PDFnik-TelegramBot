@@ -100,7 +100,7 @@ class SpamGuard:
             pipe.expire(key, self._ttl)
             results = await pipe.execute()
 
-        count_before_add = results[1]
+        count_before_add = int(results[1])
         return count_before_add < self._max
 
     async def remaining(self, chat_id: int) -> int:
@@ -109,7 +109,7 @@ class SpamGuard:
         now = time.time()
         window_start = now - self._window
         await self._redis.zremrangebyscore(key, "-inf", window_start)
-        count = await self._redis.zcard(key)
+        count = int(await self._redis.zcard(key))
         return max(0, self._max - count)
 
     async def reset(self, chat_id: int) -> None:

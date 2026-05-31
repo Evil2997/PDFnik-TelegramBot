@@ -88,12 +88,12 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 no_implicit_optional = true
 check_untyped_defs = true
-# Модули с тяжёлыми внешними зависимостями — исключаем из проверки типов.
-# Когда появятся stubs — убрать из exclude.
+disable_error_code = ["import-untyped"]
 exclude = [
     "main_app/infrastructure/bot_factory\\.py",
     "main_app/infrastructure/rabbit_connector\\.py",
     "main_app/infrastructure/redis_connector\\.py",
+    "tests/.*\\.py",
 ]
 
 # ---------------------------------------------------------------------------

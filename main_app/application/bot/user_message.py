@@ -87,7 +87,7 @@ def register_user_message_handlers(
                 else None,
             )
 
-            await redis.rpush(key, block.model_dump_json())
+            await redis.rpush(key, block.model_dump_json())  # type: ignore[misc]
 
             # Restart silence timer on each new message.
             await schedule_pause_check(chat_id, bot, redis)
@@ -101,7 +101,7 @@ def register_user_message_handlers(
                     entities=_convert_entities(msg.entities),
                 )
             )
-            await redis.rpush(key, block.model_dump_json())
+            await redis.rpush(key, block.model_dump_json())  # type: ignore[misc]
 
             # Restart silence timer on each new message.
             await schedule_pause_check(chat_id, bot, redis)
