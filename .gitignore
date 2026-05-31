@@ -1,3 +1,27 @@
+# Secrets
 .env
 
-.idea
+# IDE
+.idea/
+.idea/**
+
+# Python
+.venv/
+.venv/**
+
+__pycache__/
+__pycache__/**
+
+*.pyc
+*.pyo
+
+# Tool caches
+.ruff_cache/
+.ruff_cache/**
+
+.pytest_cache/
+.pytest_cache/**
+
+# Uploads
+uploads/
+uploads/**

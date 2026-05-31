@@ -2,7 +2,7 @@
 
 !main.py
 !pyproject.toml
-!uv.lock
+!requirements.txt
 
 !main_app/
 !main_app/**
