@@ -61,7 +61,7 @@ exclude = [".git", ".venv", "__pycache__", "*.egg-info"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]
 ignore = [
-    "E501", # line too long — контролируется formatter
+    "E501", # line too long - controlled by formatter
     "B008", # function calls in default args (aiogram DI)
     "SIM108",
 ]
@@ -80,8 +80,8 @@ line-ending = "lf"
 
 [tool.mypy]
 python_version = "3.13"
-# Не strict: aiogram и faststream не имеют полных stubs.
-# Включаем полезные проверки без блокировки на отсутствующих типах.
+# Not strict: aiogram and faststream don't have complete stubs.
+# Enable useful checks without blocking on missing types.
 ignore_missing_imports = true
 warn_return_any = true
 warn_unused_ignores = true
