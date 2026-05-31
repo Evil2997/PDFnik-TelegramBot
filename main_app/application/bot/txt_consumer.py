@@ -116,6 +116,7 @@ async def _maybe_publish_youtube_pdf(
             transcript_text=transcript_text,
             metadata=result.youtube_metadata,
             summary=result.summary,
+            extract_mode=result.extract_mode,
         )
         await broker.publish(pdf_order, queue="pdf.generate")
         title = (result.youtube_metadata or {}).get("title", "")
@@ -139,6 +140,28 @@ def register_txt_done_consumer(
     bot: Bot,
     storage: LocalFileStorage,
 ) -> None:
+    @broker.subscriber("txt.progress")
+    async def txt_progress_consumer(data: dict) -> None:
+        chat_id = data.get("chat_id")
+        current = data.get("current", 0)
+        total = data.get("total", 0)
+        title = data.get("title", "")
+        if not chat_id:
+            return
+        try:
+            await bot.send_message(
+                chat_id,
+                f"Transcribing video {current}/{total}: {title}",
+            )
+        except Exception as exc:
+            logger.warning(
+                "event=progress_send_failed chat_id=%s current=%s/%s err=%s",
+                chat_id,
+                current,
+                total,
+                exc,
+            )
+
     @broker.subscriber("txt.done")
     async def txt_done_consumer(data: dict) -> None:
         try:

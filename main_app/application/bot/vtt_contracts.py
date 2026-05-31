@@ -41,6 +41,7 @@ class TxtTranscribeRequest(BaseModel):
       "target": {"kind": "storage_key" | "url", "value": "..."},
       "reply": {"chat_id": 123, "reply_to_message_id": 456},
       "delivery": {"source_type": "voice", "mode": "text"},
+      "extract_mode": "summary" | "learn" | "commands" | "pipeline" | "tips" | "none" | null,
       "cfg": {}
     }
     """
@@ -51,6 +52,7 @@ class TxtTranscribeRequest(BaseModel):
     target: TxtTarget
     reply: TxtReply
     delivery: TxtDelivery
+    extract_mode: str | None = None
     cfg: dict[str, Any] | None = None
 
 
@@ -69,8 +71,11 @@ class TxtDoneSuccess(BaseModel):
     # YouTube metadata — populated only when source_type == "youtube".
     youtube_metadata: dict | None = None
 
-    # LLM-generated summary — populated when backend has a summary provider configured.
+    # LLM extraction result — populated when backend has a provider and extract_mode is set.
     summary: str | None = None
+
+    # Mode used for extraction (summary/learn/commands/pipeline/tips/none).
+    extract_mode: str | None = None
 
 
 class TxtDoneError(BaseModel):
@@ -161,5 +166,6 @@ def parse_txt_done_message(data: dict) -> TxtDoneSuccess | TxtDoneError:
         "cached": data.get("cached"),
         "youtube_metadata": data.get("youtube_metadata"),
         "summary": data.get("summary"),
+        "extract_mode": data.get("extract_mode"),
     }
     return TxtDoneSuccess.model_validate(normalized)

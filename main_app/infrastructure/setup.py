@@ -1,5 +1,6 @@
 from main_app.application.bot.commands import register_command_handlers
 from main_app.application.bot.pdf_consumer import register_pdf_send_consumer
+from main_app.application.bot.playlist_mode import register_playlist_mode_handlers
 from main_app.application.bot.txt_consumer import register_txt_done_consumer
 from main_app.application.bot.user_message import register_user_message_handlers
 from main_app.application.bot.vtt_message import register_vtt_message_handlers
@@ -16,6 +17,9 @@ def setup_bot_handlers_and_subscribers() -> None:
     # VTT ingress should be registered BEFORE generic text handler,
     # so YouTube links can be intercepted without breaking existing text/photo logic.
     register_vtt_message_handlers(dp, bot, storage, broker, redis)
+
+    # playlist mode selection (inline keyboard callback handler)
+    register_playlist_mode_handlers(dp, bot, broker, redis)
 
     # existing user text/photo session logic (PDF is built only from this)
     register_user_message_handlers(dp, redis, bot, storage)

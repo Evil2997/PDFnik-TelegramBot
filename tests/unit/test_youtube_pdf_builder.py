@@ -182,7 +182,7 @@ class TestBuildYoutubePdfOrder:
             summary="This is the summary.",
         )
         items = result["items"]
-        texts = [b.content.text for b in items]
+        texts = [b["content"]["text"] if isinstance(b, dict) else b.content.text for b in items]
         assert "Summary" in texts
         assert "This is the summary." in texts
 
@@ -194,7 +194,7 @@ class TestBuildYoutubePdfOrder:
             summary="Short summary.",
         )
         items = result["items"]
-        texts = [b.content.text for b in items]
+        texts = [b["content"]["text"] if isinstance(b, dict) else b.content.text for b in items]
         summary_idx = texts.index("Short summary.")
         transcript_idx = texts.index("Transcript text.")
         assert summary_idx < transcript_idx
@@ -206,7 +206,7 @@ class TestBuildYoutubePdfOrder:
             metadata={"title": "My Video"},
         )
         items = result["items"]
-        texts = [b.content.text for b in items]
+        texts = [b["content"]["text"] if isinstance(b, dict) else b.content.text for b in items]
         assert "Summary" not in texts
 
     def test_empty_summary_no_summary_blocks(self):
@@ -216,5 +216,5 @@ class TestBuildYoutubePdfOrder:
             summary="",
         )
         items = result["items"]
-        texts = [b.content.text for b in items]
+        texts = [b["content"]["text"] if isinstance(b, dict) else b.content.text for b in items]
         assert "Summary" not in texts

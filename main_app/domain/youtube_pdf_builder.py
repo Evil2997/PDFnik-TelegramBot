@@ -8,11 +8,14 @@ Pure domain function — no Telegram, no broker, no storage.
 Accepts transcript_text + metadata dict -> returns dict for broker.publish().
 
 PDF structure:
-    [VIDEO TITLE]        <- heading, only if title is present
+    [VIDEO/PLAYLIST TITLE]   <- heading, only if title is present
     Channel · Date · Duration  <- paragraph, only populated parts
     ----------------------------------------
+    [Mode label]             <- e.g. "Summary", "Key Concepts", only if summary present
+    [extracted content]      <- LLM output or omitted
+    ----------------------------------------
     [transcript]
-    Source: https://...  <- if url is present
+    Source: https://...      <- if url is present
 """
 
 from pdfnik_contracts.pdf_content import (
@@ -57,12 +60,23 @@ def _subtitle_line(meta: dict) -> str:
     return " · ".join(parts)
 
 
+_MODE_LABELS: dict[str, str] = {
+    "summary": "Summary",
+    "learn": "Key Concepts & Learning Path",
+    "commands": "Commands & Code",
+    "pipeline": "Step-by-Step Pipeline",
+    "tips": "Practical Tips",
+    "none": "Transcript",
+}
+
+
 def build_youtube_pdf_order(
     *,
     chat_id: int,
     transcript_text: str,
     metadata: dict | None = None,
     summary: str | None = None,
+    extract_mode: str | None = None,
 ) -> dict:
     """
     Builds a payload for the pdf.generate queue.
@@ -72,7 +86,8 @@ def build_youtube_pdf_order(
         transcript_text -- decoded and stripped transcript text
         metadata        -- dict from youtube_metadata field in TxtDoneSuccess,
                            or None if metadata is unavailable
-        summary         -- LLM-generated summary to insert before the transcript, or None
+        summary         -- LLM-extracted content to insert before raw transcript, or None
+        extract_mode    -- mode key used for extraction; controls section label
 
     Returns a dict (PdfOrder.model_dump()) ready for broker.publish(queue="pdf.generate").
     """
@@ -90,7 +105,8 @@ def build_youtube_pdf_order(
         blocks.append(PdfParagraphBlock(content=PdfRichText(text="-" * 40, entities=[])))
 
     if summary:
-        blocks.append(PdfHeadingBlock(content=PdfRichText(text="Summary", entities=[])))
+        section_label = _MODE_LABELS.get(extract_mode or "summary", "Summary")
+        blocks.append(PdfHeadingBlock(content=PdfRichText(text=section_label, entities=[])))
         blocks.append(PdfParagraphBlock(content=PdfRichText(text=summary, entities=[])))
         blocks.append(PdfParagraphBlock(content=PdfRichText(text="-" * 40, entities=[])))
 

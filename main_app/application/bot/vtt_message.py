@@ -11,6 +11,10 @@ from aiogram.types import Audio, Document, Message, Video, Voice
 from faststream.rabbit import RabbitBroker
 from faststream.redis import Redis
 
+from main_app.application.bot.playlist_mode import (
+    make_mode_keyboard,
+    store_pending_playlist,
+)
 from main_app.application.bot.vtt_contracts import (
     DeliveryMode,
     SourceType,
@@ -22,6 +26,11 @@ from main_app.application.bot.vtt_contracts import (
 )
 from main_app.core.logger import logger
 from main_app.infrastructure.storage import LocalFileStorage
+
+
+def _is_playlist_url(url: str) -> bool:
+    return "youtube.com/playlist" in url.lower()
+
 
 _MIME_DEFAULT_EXT: dict[str, str] = {
     "audio/ogg": ".ogg",
@@ -42,8 +51,14 @@ _YOUTUBE_URL_RE = re.compile(
     r"(?P<url>"
     r"(?:https?://)?"
     r"(?:(?:www|m)\.)?"
-    r"(?:youtube\.com/(?:watch\?(?:[^ \n\r\t]*&)?v=[^ \n\r\t&]+(?:[^ \n\r\t]*)?|shorts/[^ \n\r\t/?&]+(?:\?[^ \n\r\t]*)?)"
-    r"|youtu\.be/[^ \n\r\t/?&]+(?:\?[^ \n\r\t]*)?)"
+    r"(?:"
+    r"youtube\.com/(?:"
+    r"watch\?(?:[^ \n\r\t]*&)?v=[^ \n\r\t&]+(?:[^ \n\r\t]*)?"
+    r"|shorts/[^ \n\r\t/?&]+(?:\?[^ \n\r\t]*)?"
+    r"|playlist\?(?:[^ \n\r\t]*&)?list=[^ \n\r\t&]+(?:[^ \n\r\t]*)?"
+    r")"
+    r"|youtu\.be/[^ \n\r\t/?&]+(?:\?[^ \n\r\t]*)?"
+    r")"
     r")",
     re.IGNORECASE,
 )
@@ -281,6 +296,12 @@ def register_vtt_message_handlers(
                 chat_id,
                 reply_to_message_id,
             )
+            return
+
+        if _is_playlist_url(url):
+            await store_pending_playlist(redis, chat_id, reply_to_message_id, url)
+            keyboard = make_mode_keyboard(reply_to_message_id)
+            await msg.answer("Playlist detected. Choose extraction mode:", reply_markup=keyboard)
             return
 
         job_id = str(uuid.uuid4())

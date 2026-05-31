@@ -191,6 +191,8 @@ class TestMaybePublishYoutubePdf:
             chat_id=12345,
             transcript_text="Transcript text.",
             metadata=meta,
+            summary=None,
+            extract_mode=None,
         )
 
     @pytest.mark.asyncio
