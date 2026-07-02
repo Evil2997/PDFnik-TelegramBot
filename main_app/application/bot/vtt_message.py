@@ -146,6 +146,10 @@ def _extract_first_youtube_url(text: str) -> str | None:
     return _normalize_url(match.group("url"))
 
 
+def _extract_all_youtube_urls(text: str) -> list[str]:
+    return [_normalize_url(m.group("url")) for m in _YOUTUBE_URL_RE.finditer(text or "")]
+
+
 def _build_dedupe_key(chat_id: int, message_id: int) -> str:
     return f"vtt:dedupe:{chat_id}:{message_id}"
 
@@ -323,9 +327,38 @@ def register_vtt_message_handlers(
 
         await msg.answer("Got it, transcribing...")
 
+    async def _handle_youtube_batch(msg: Message, urls: list[str]) -> None:
+        chat_id = msg.chat.id
+        reply_to_message_id = msg.message_id
+
+        is_new_message = await _acquire_dedupe_lock(redis, chat_id, reply_to_message_id)
+        if not is_new_message:
+            return
+
+        job_id = str(uuid.uuid4())
+        is_published = await _publish_job(
+            job_id=job_id,
+            target_kind="url_batch",
+            target_value="\n".join(urls),
+            chat_id=chat_id,
+            reply_to_message_id=reply_to_message_id,
+            source_type="youtube",
+        )
+        if not is_published:
+            await msg.answer(f"Could not submit batch job. Please try later.\njob_id: {job_id}")
+            return
+        await msg.answer(f"Got it, processing {len(urls)} videos...")
+
     @dp.message(F.text.regexp(_YOUTUBE_URL_RE))
     async def on_text_youtube(msg: Message) -> None:
         if not msg.text:
+            return
+        all_urls = _extract_all_youtube_urls(msg.text)
+        if not all_urls:
+            return
+        individual = [u for u in all_urls if not _is_playlist_url(u)]
+        if len(individual) >= 2:
+            await _handle_youtube_batch(msg, individual)
             return
         youtube_url = _extract_first_youtube_url(msg.text)
         if not youtube_url:

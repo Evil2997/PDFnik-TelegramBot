@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 SourceType = Literal["voice", "audio", "video", "youtube"]
 DeliveryMode = Literal["text", "document"]
-TargetKind = Literal["storage_key", "url"]
+TargetKind = Literal["storage_key", "url", "url_batch"]
 
 
 class TxtTarget(BaseModel):
