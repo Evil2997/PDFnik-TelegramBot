@@ -1,94 +1,28 @@
 # /home/dmitriy/PycharmProjects/Telegram-Bot/main_app/application/bot/vtt_contracts.py
 # repo: PDFnik-TelegramBot
 
-from typing import Any, Literal
+from pdfnik_contracts.txt_content import (
+    DeliveryMode,
+    SourceType,
+    TargetKind,
+    TxtDelivery,
+    TxtDoneResult,
+    TxtReply,
+    TxtTarget,
+    TxtTranscribeJob,
+)
 
-from pydantic import BaseModel, ConfigDict, Field
-
-SourceType = Literal["voice", "audio", "video", "youtube"]
-DeliveryMode = Literal["text", "document"]
-TargetKind = Literal["storage_key", "url", "url_batch"]
-
-
-class TxtTarget(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    kind: TargetKind
-    value: str = Field(min_length=1)
-
-
-class TxtReply(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    chat_id: int
-    reply_to_message_id: int | None = None
-
-
-class TxtDelivery(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    source_type: SourceType
-    mode: DeliveryMode
-
-
-class TxtTranscribeRequest(BaseModel):
-    """
-    Canonical payload for the txt.transcribe queue.
-
-    Published by the Telegram bot:
-    {
-      "job_id": "...",
-      "target": {"kind": "storage_key" | "url", "value": "..."},
-      "reply": {"chat_id": 123, "reply_to_message_id": 456},
-      "delivery": {"source_type": "voice", "mode": "text"},
-      "extract_mode": "summary" | "learn" | "commands" | "pipeline" | "tips" | "none" | null,
-      "cfg": {}
-    }
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    job_id: str = Field(min_length=1)
-    target: TxtTarget
-    reply: TxtReply
-    delivery: TxtDelivery
-    extract_mode: str | None = None
-    cfg: dict[str, Any] | None = None
-
-
-class TxtDoneSuccess(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    job_id: str
-    status: Literal["ok"] = "ok"
-    txt_storage_key: str
-
-    reply: TxtReply
-    delivery: TxtDelivery
-
-    cached: bool | None = None
-
-    # YouTube metadata — populated only when source_type == "youtube".
-    youtube_metadata: dict | None = None
-
-    # LLM extraction result — populated when backend has a provider and extract_mode is set.
-    summary: str | None = None
-
-    # Mode used for extraction (summary/learn/commands/pipeline/tips/none).
-    extract_mode: str | None = None
-
-
-class TxtDoneError(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    job_id: str
-    status: Literal["error"] = "error"
-
-    reply: TxtReply | None = None
-    delivery: TxtDelivery | None = None
-
-    error: str | None = None
-    error_code: str | None = None
+__all__ = [
+    "DeliveryMode",
+    "SourceType",
+    "TargetKind",
+    "TxtDelivery",
+    "TxtDoneResult",
+    "TxtReply",
+    "TxtTarget",
+    "TxtTranscribeJob",
+    "parse_txt_done_message",
+]
 
 
 def _parse_reply(data: dict) -> TxtReply:
@@ -110,10 +44,10 @@ def _parse_delivery(data: dict) -> TxtDelivery:
     if not mode:
         mode = "text" if source_type == "voice" else "document"
 
-    return TxtDelivery(source_type=source_type, mode=mode)  # type: ignore[arg-type]
+    return TxtDelivery(source_type=source_type, mode=mode)
 
 
-def parse_txt_done_message(data: dict) -> TxtDoneSuccess | TxtDoneError:
+def parse_txt_done_message(data: dict) -> TxtDoneResult:
     """
     Supports both canonical and legacy txt.done payloads.
 
@@ -126,6 +60,8 @@ def parse_txt_done_message(data: dict) -> TxtDoneSuccess | TxtDoneError:
         - source_type / delivery_mode
         - result_storage_key / text_storage_key / storage_key
         - error_message / error
+
+    Returns a single TxtDoneResult, discriminated by `status`.
     """
     status = str(data.get("status") or "").strip().lower()
 
@@ -140,7 +76,7 @@ def parse_txt_done_message(data: dict) -> TxtDoneSuccess | TxtDoneError:
         if "delivery" in data or "source_type" in data or "delivery_mode" in data:
             delivery = _parse_delivery(data)
 
-        return TxtDoneError(
+        return TxtDoneResult(
             job_id=str(data["job_id"]),
             status="error",
             reply=reply,
@@ -157,15 +93,14 @@ def parse_txt_done_message(data: dict) -> TxtDoneSuccess | TxtDoneError:
             or data.get("storage_key")
         )
 
-    normalized = {
-        "job_id": str(data["job_id"]),
-        "status": "ok",
-        "txt_storage_key": txt_storage_key,
-        "reply": _parse_reply(data).model_dump(),
-        "delivery": _parse_delivery(data).model_dump(),
-        "cached": data.get("cached"),
-        "youtube_metadata": data.get("youtube_metadata"),
-        "summary": data.get("summary"),
-        "extract_mode": data.get("extract_mode"),
-    }
-    return TxtDoneSuccess.model_validate(normalized)
+    return TxtDoneResult(
+        job_id=str(data["job_id"]),
+        status="ok",
+        txt_storage_key=txt_storage_key,
+        reply=_parse_reply(data),
+        delivery=_parse_delivery(data),
+        cached=data.get("cached"),
+        youtube_metadata=data.get("youtube_metadata"),
+        summary=data.get("summary"),
+        extract_mode=data.get("extract_mode"),
+    )

@@ -5,7 +5,7 @@
 Builds a PdfOrder for the pdf.generate queue from a YouTube transcript and metadata.
 
 Pure domain function — no Telegram, no broker, no storage.
-Accepts transcript_text + metadata dict -> returns dict for broker.publish().
+Accepts transcript_text + typed YouTubeMetadata -> returns dict for broker.publish().
 
 PDF structure:
     [VIDEO/PLAYLIST TITLE]   <- heading, only if title is present
@@ -25,6 +25,7 @@ from pdfnik_contracts.pdf_content import (
     PdfRichText,
     PdfTextBlock,
 )
+from pdfnik_contracts.txt_content import YouTubeMetadata
 
 
 def _duration_str(duration_sec: float | None) -> str:
@@ -46,15 +47,15 @@ def _date_str(upload_date: str | None) -> str:
     return f"{d[6:8]}.{d[4:6]}.{d[:4]}"
 
 
-def _subtitle_line(meta: dict) -> str:
+def _subtitle_line(meta: YouTubeMetadata) -> str:
     """Builds a subtitle line: 'Channel · 15.03.2024 · 12:34'. Empty parts are skipped."""
     parts = []
-    if meta.get("channel"):
-        parts.append(meta["channel"])
-    date = _date_str(meta.get("upload_date"))
+    if meta.channel:
+        parts.append(meta.channel)
+    date = _date_str(meta.upload_date)
     if date:
         parts.append(date)
-    duration = _duration_str(meta.get("duration_sec"))
+    duration = _duration_str(meta.duration_sec)
     if duration:
         parts.append(duration)
     return " · ".join(parts)
@@ -74,7 +75,7 @@ def build_youtube_pdf_order(
     *,
     chat_id: int,
     transcript_text: str,
-    metadata: dict | None = None,
+    metadata: YouTubeMetadata | None = None,
     summary: str | None = None,
     extract_mode: str | None = None,
 ) -> dict:
@@ -84,21 +85,19 @@ def build_youtube_pdf_order(
     Args:
         chat_id         -- Telegram chat_id for PDF delivery
         transcript_text -- decoded and stripped transcript text
-        metadata        -- dict from youtube_metadata field in TxtDoneSuccess,
-                           or None if metadata is unavailable
+        metadata        -- YouTubeMetadata from the youtube_metadata field in
+                           TxtDoneResult, or None if metadata is unavailable
         summary         -- LLM-extracted content to insert before raw transcript, or None
         extract_mode    -- mode key used for extraction; controls section label
 
     Returns a dict (PdfOrder.model_dump()) ready for broker.publish(queue="pdf.generate").
     """
-    meta = metadata or {}
     blocks = []
 
-    title = meta.get("title")
-    if title:
-        blocks.append(PdfHeadingBlock(content=PdfRichText(text=title, entities=[])))
+    if metadata and metadata.title:
+        blocks.append(PdfHeadingBlock(content=PdfRichText(text=metadata.title, entities=[])))
 
-        subtitle = _subtitle_line(meta)
+        subtitle = _subtitle_line(metadata)
         if subtitle:
             blocks.append(PdfParagraphBlock(content=PdfRichText(text=subtitle, entities=[])))
 
@@ -114,8 +113,9 @@ def build_youtube_pdf_order(
         PdfTextBlock(content=PdfRichText(text=transcript_text or "(empty transcript)", entities=[]))
     )
 
-    url = meta.get("url")
-    if url:
-        blocks.append(PdfParagraphBlock(content=PdfRichText(text=f"\nSource: {url}", entities=[])))
+    if metadata and metadata.url:
+        blocks.append(
+            PdfParagraphBlock(content=PdfRichText(text=f"\nSource: {metadata.url}", entities=[]))
+        )
 
     return PdfOrder(chat_id=chat_id, items=blocks).model_dump()  # type: ignore[no-any-return]

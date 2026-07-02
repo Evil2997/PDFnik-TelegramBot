@@ -21,7 +21,7 @@ from main_app.application.bot.txt_consumer import (
     _maybe_publish_youtube_pdf,
     _should_send_as_short_message,
 )
-from main_app.application.bot.vtt_contracts import TxtDelivery, TxtDoneSuccess, TxtReply
+from main_app.application.bot.vtt_contracts import TxtDelivery, TxtDoneResult, TxtReply
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -31,8 +31,8 @@ from main_app.application.bot.vtt_contracts import TxtDelivery, TxtDoneSuccess, 
 def _make_success(
     source_type: str = "youtube",
     youtube_metadata: dict | None = None,
-) -> TxtDoneSuccess:
-    return TxtDoneSuccess(
+) -> TxtDoneResult:
+    return TxtDoneResult(
         job_id="job-test-001",
         status="ok",
         txt_storage_key="txts/job-test-001.txt",
@@ -190,7 +190,7 @@ class TestMaybePublishYoutubePdf:
         mock_builder.assert_called_once_with(
             chat_id=12345,
             transcript_text="Transcript text.",
-            metadata=meta,
+            metadata=result.youtube_metadata,
             summary=None,
             extract_mode=None,
         )

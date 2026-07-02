@@ -10,7 +10,7 @@ from main_app.application.bot.vtt_contracts import (
     TxtDelivery,
     TxtReply,
     TxtTarget,
-    TxtTranscribeRequest,
+    TxtTranscribeJob,
 )
 from main_app.core.logger import logger
 
@@ -94,7 +94,7 @@ def register_playlist_mode_handlers(
         await callback.answer()
 
         job_id = str(uuid.uuid4())
-        payload = TxtTranscribeRequest(
+        payload = TxtTranscribeJob(
             job_id=job_id,
             target=TxtTarget(kind="url", value=url),
             reply=TxtReply(chat_id=chat_id, reply_to_message_id=orig_msg_id),

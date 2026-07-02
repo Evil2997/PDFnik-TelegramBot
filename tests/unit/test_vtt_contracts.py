@@ -3,8 +3,7 @@
 
 
 from main_app.application.bot.vtt_contracts import (
-    TxtDoneError,
-    TxtDoneSuccess,
+    TxtDoneResult,
     _parse_delivery,
     _parse_reply,
     parse_txt_done_message,
@@ -84,7 +83,8 @@ class TestParseTxtDoneSuccess:
 
     def test_canonical_success(self):
         result = parse_txt_done_message(self._ok())
-        assert isinstance(result, TxtDoneSuccess)
+        assert isinstance(result, TxtDoneResult)
+        assert result.status == "ok"
         assert result.job_id == "job-abc"
         assert result.txt_storage_key == "txts/job-abc.txt"
         assert result.reply.chat_id == 111
@@ -93,18 +93,18 @@ class TestParseTxtDoneSuccess:
     def test_youtube_metadata_passed_through(self):
         meta = {"url": "https://youtube.com/watch?v=abc", "title": "Test", "duration_sec": 300.0}
         result = parse_txt_done_message(self._ok(youtube_metadata=meta))
-        assert isinstance(result, TxtDoneSuccess)
+        assert result.status == "ok"
         assert result.youtube_metadata is not None
-        assert result.youtube_metadata["title"] == "Test"
+        assert result.youtube_metadata.title == "Test"
 
     def test_no_youtube_metadata_is_none(self):
         result = parse_txt_done_message(self._ok())
-        assert isinstance(result, TxtDoneSuccess)
+        assert result.status == "ok"
         assert result.youtube_metadata is None
 
     def test_cached_field_preserved(self):
         result = parse_txt_done_message(self._ok(cached=True))
-        assert isinstance(result, TxtDoneSuccess)
+        assert result.status == "ok"
         assert result.cached is True
 
     def test_legacy_result_storage_key(self):
@@ -116,7 +116,7 @@ class TestParseTxtDoneSuccess:
             "delivery": {"source_type": "voice", "mode": "text"},
         }
         result = parse_txt_done_message(data)
-        assert isinstance(result, TxtDoneSuccess)
+        assert result.status == "ok"
         assert result.txt_storage_key == "txts/legacy.txt"
 
 
@@ -139,21 +139,21 @@ class TestParseTxtDoneError:
 
     def test_canonical_error(self):
         result = parse_txt_done_message(self._err())
-        assert isinstance(result, TxtDoneError)
+        assert result.status == "error"
         assert result.error == "Transcription failed"
 
     def test_error_code_preserved(self):
         result = parse_txt_done_message(self._err(error_code="WHISPER_OOM"))
-        assert isinstance(result, TxtDoneError)
+        assert result.status == "error"
         assert result.error_code == "WHISPER_OOM"
 
     def test_error_without_reply(self):
         data = {"job_id": "j3", "status": "error", "error": "oops"}
         result = parse_txt_done_message(data)
-        assert isinstance(result, TxtDoneError)
+        assert result.status == "error"
         assert result.reply is None
 
     def test_error_key_without_status_field(self):
         data = {"job_id": "j5", "error": "something went wrong", "chat_id": 1}
         result = parse_txt_done_message(data)
-        assert isinstance(result, TxtDoneError)
+        assert result.status == "error"

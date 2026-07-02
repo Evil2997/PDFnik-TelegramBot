@@ -6,8 +6,7 @@ from aiogram.types import BufferedInputFile
 from faststream.rabbit import RabbitBroker
 
 from main_app.application.bot.vtt_contracts import (
-    TxtDoneError,
-    TxtDoneSuccess,
+    TxtDoneResult,
     parse_txt_done_message,
 )
 from main_app.core.logger import logger
@@ -98,7 +97,7 @@ async def _send_transcript_document(
 async def _maybe_publish_youtube_pdf(
     *,
     broker: RabbitBroker,
-    result: TxtDoneSuccess,
+    result: TxtDoneResult,
     transcript_text: str,
 ) -> None:
     """
@@ -119,7 +118,7 @@ async def _maybe_publish_youtube_pdf(
             extract_mode=result.extract_mode,
         )
         await broker.publish(pdf_order, queue="pdf.generate")
-        title = (result.youtube_metadata or {}).get("title", "")
+        title = result.youtube_metadata.title if result.youtube_metadata else ""
         logger.info(
             "event=youtube_pdf_published job_id=%s chat_id=%s title=%r",
             result.job_id,
@@ -191,7 +190,7 @@ def register_txt_done_consumer(
             logger.exception("Invalid txt.done payload, drop. err=%s payload=%s", exc, data)
             return
 
-        if isinstance(parsed, TxtDoneError):
+        if parsed.status == "error":
             chat_id = parsed.reply.chat_id if parsed.reply else None
             reply_to_message_id = parsed.reply.reply_to_message_id if parsed.reply else None
             source_type = parsed.delivery.source_type if parsed.delivery else None
@@ -219,7 +218,7 @@ def register_txt_done_consumer(
                 )
             return
 
-        result: TxtDoneSuccess = parsed
+        result: TxtDoneResult = parsed
         chat_id = result.reply.chat_id
         reply_to_message_id = result.reply.reply_to_message_id
         source_type = result.delivery.source_type
@@ -339,8 +338,7 @@ def register_txt_done_consumer(
                 )
             except Exception as exc:
                 logger.exception(
-                    "event=vtt_send_result_failed job_id=%s chat_id=%s "
-                    "delivery=text idx=0 err=%s",
+                    "event=vtt_send_result_failed job_id=%s chat_id=%s delivery=text idx=0 err=%s",
                     result.job_id,
                     chat_id,
                     exc,

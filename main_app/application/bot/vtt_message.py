@@ -22,7 +22,7 @@ from main_app.application.bot.vtt_contracts import (
     TxtDelivery,
     TxtReply,
     TxtTarget,
-    TxtTranscribeRequest,
+    TxtTranscribeJob,
 )
 from main_app.core.logger import logger
 from main_app.infrastructure.storage import LocalFileStorage
@@ -185,7 +185,7 @@ def register_vtt_message_handlers(
         reply_to_message_id: int | None,
         source_type: SourceType,
     ) -> bool:
-        payload = TxtTranscribeRequest(
+        payload = TxtTranscribeJob(
             job_id=job_id,
             target=TxtTarget(kind=target_kind, value=target_value),
             reply=TxtReply(chat_id=chat_id, reply_to_message_id=reply_to_message_id),
@@ -282,7 +282,7 @@ def register_vtt_message_handlers(
         )
         if not is_published:
             await msg.answer(
-                "Could not submit transcription job. Please try later.\n" f"job_id: {job_id}"
+                f"Could not submit transcription job. Please try later.\njob_id: {job_id}"
             )
             return
 
@@ -320,8 +320,7 @@ def register_vtt_message_handlers(
         )
         if not is_published:
             await msg.answer(
-                "Could not submit YouTube for transcription. Please try later.\n"
-                f"job_id: {job_id}"
+                f"Could not submit YouTube for transcription. Please try later.\njob_id: {job_id}"
             )
             return
 

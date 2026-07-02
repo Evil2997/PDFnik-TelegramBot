@@ -12,14 +12,45 @@ import types
 # ---------------------------------------------------------------------------
 
 
+class _YouTubeMetadata:
+    def __init__(
+        self,
+        *,
+        url: str | None = None,
+        title: str | None = None,
+        channel: str | None = None,
+        uploader: str | None = None,
+        upload_date: str | None = None,
+        duration_sec: float | None = None,
+        view_count: int | None = None,
+        description: str | None = None,
+        thumbnail_url: str | None = None,
+    ):
+        self.url = url
+        self.title = title
+        self.channel = channel
+        self.uploader = uploader
+        self.upload_date = upload_date
+        self.duration_sec = duration_sec
+        self.view_count = view_count
+        self.description = description
+        self.thumbnail_url = thumbnail_url
+
+
 def _setup_stubs() -> None:
     if "pdfnik_contracts" in sys.modules:
         return
 
-    for name in ["pdfnik_contracts", "pdfnik_contracts.pdf_content"]:
+    for name in [
+        "pdfnik_contracts",
+        "pdfnik_contracts.pdf_content",
+        "pdfnik_contracts.txt_content",
+    ]:
         sys.modules[name] = types.ModuleType(name)
 
     pc = sys.modules["pdfnik_contracts.pdf_content"]
+    pc_txt = sys.modules["pdfnik_contracts.txt_content"]
+    pc_txt.YouTubeMetadata = _YouTubeMetadata
 
     class _RT:
         def __init__(self, *, text: str, entities=None):
@@ -110,7 +141,7 @@ class TestDateStr:
 
 class TestSubtitleLine:
     def test_all_parts(self):
-        meta = {"channel": "Chan", "upload_date": "20240315", "duration_sec": 300.0}
+        meta = _YouTubeMetadata(channel="Chan", upload_date="20240315", duration_sec=300.0)
         line = _subtitle_line(meta)
         assert "Chan" in line
         assert "15.03.2024" in line
@@ -118,10 +149,10 @@ class TestSubtitleLine:
         assert " · " in line
 
     def test_empty_meta(self):
-        assert _subtitle_line({}) == ""
+        assert _subtitle_line(_YouTubeMetadata()) == ""
 
     def test_only_channel(self):
-        assert _subtitle_line({"channel": "Chan"}) == "Chan"
+        assert _subtitle_line(_YouTubeMetadata(channel="Chan")) == "Chan"
 
 
 # ---------------------------------------------------------------------------
@@ -142,13 +173,13 @@ class TestBuildYoutubePdfOrder:
         result = build_youtube_pdf_order(
             chat_id=1,
             transcript_text="Transcript.",
-            metadata={
-                "url": "https://youtube.com/watch?v=abc",
-                "title": "My Video",
-                "channel": "Chan",
-                "upload_date": "20240315",
-                "duration_sec": 300.0,
-            },
+            metadata=_YouTubeMetadata(
+                url="https://youtube.com/watch?v=abc",
+                title="My Video",
+                channel="Chan",
+                upload_date="20240315",
+                duration_sec=300.0,
+            ),
         )
         # result.items is not included in model_dump() (our stub returns []),
         # but we can verify that the function does not crash and returns a dict.
@@ -178,7 +209,7 @@ class TestBuildYoutubePdfOrder:
         result = build_youtube_pdf_order(
             chat_id=1,
             transcript_text="Transcript.",
-            metadata={"title": "My Video"},
+            metadata=_YouTubeMetadata(title="My Video"),
             summary="This is the summary.",
         )
         items = result["items"]
@@ -190,7 +221,7 @@ class TestBuildYoutubePdfOrder:
         result = build_youtube_pdf_order(
             chat_id=1,
             transcript_text="Transcript text.",
-            metadata={"title": "My Video"},
+            metadata=_YouTubeMetadata(title="My Video"),
             summary="Short summary.",
         )
         items = result["items"]
@@ -203,7 +234,7 @@ class TestBuildYoutubePdfOrder:
         result = build_youtube_pdf_order(
             chat_id=1,
             transcript_text="Transcript.",
-            metadata={"title": "My Video"},
+            metadata=_YouTubeMetadata(title="My Video"),
         )
         items = result["items"]
         texts = [b["content"]["text"] if isinstance(b, dict) else b.content.text for b in items]
