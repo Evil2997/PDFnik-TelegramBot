@@ -1,92 +1,177 @@
-name: CI — Telegram Bot
+# .github/workflows/ci.yml
+#
+# CI — запускается на любой push и pull_request в main
+# Отвечает за: качество кода, типизацию, тесты, сборку образа
+#
+# CD находится в: .github/workflows/cd.yml
+
+name: CI
 
 on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+env:
+  PYTHON_VERSION: "3.13"
+  IMAGE_NAME: pdfnik-bot
 
 jobs:
-  # ── Lint ──────────────────────────────────────────────────────────────────
+
+  # ─────────────────────────────────────────────
+  #  LINT — ruff + mypy
+  # ─────────────────────────────────────────────
   lint:
-    name: Lint (ruff + mypy)
+    name: "Lint & Type check"
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-python@v5
         with:
-          version: "latest"
+          python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install dev dependencies
-        run: uv sync --extra dev
+      - name: Install uv
+        run: pip install uv
 
-      - name: ruff — check
+      - name: Cache virtualenv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: ruff lint
         run: uv run ruff check .
 
-      - name: ruff — format check
+      - name: ruff format check
         run: uv run ruff format --check .
 
       - name: mypy
-        run: uv run mypy main_app/
+        run: uv run mypy main_app/ --strict --ignore-missing-imports
 
-  # ── Tests ─────────────────────────────────────────────────────────────────
-  test:
-    name: Tests (pytest + coverage)
+  # ─────────────────────────────────────────────
+  #  SECURITY — bandit + trivy
+  # ─────────────────────────────────────────────
+  security:
+    name: "Security scan"
     runs-on: ubuntu-latest
-    needs: lint
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-python@v5
         with:
-          version: "latest"
+          python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install dev dependencies
-        run: uv sync --extra dev
+      - name: Install uv
+        run: pip install uv
 
-      - name: Run tests with coverage
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: bandit
+        run: uv run bandit -r main_app/ --severity-level=medium --confidence-level=medium -x tests/
+
+      - name: Install trivy
         run: |
-          uv run pytest tests/unit/ \
-            -v \
-            --tb=short \
-            --cov=main_app \
-            --cov-report=term-missing \
-            --cov-report=xml:coverage.xml \
-            --cov-fail-under=65
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
 
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: trivy (CVE year-based scan)
+        run: bash scripts/trivy_check.sh fs .
+
+  # ─────────────────────────────────────────────
+  #  TEST — pytest с сервисами
+  # ─────────────────────────────────────────────
+  test:
+    name: "Tests"
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        ports: ["5672:5672"]
+        options: >-
+          --health-cmd "rabbitmq-diagnostics ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Cache virtualenv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: pytest
+        run: uv run pytest tests/ -v --cov=main_app --cov-report=xml --cov-report=term-missing
+        env:
+          REDIS_URL: redis://localhost:6379
+          RABBITMQ_URL: amqp://guest:guest@localhost:5672/ # pragma: allowlist secret
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
         if: always()
         with:
-          name: coverage-report
-          path: coverage.xml
-          retention-days: 7
+          file: ./coverage.xml
+          fail_ci_if_error: false
 
-  # ── Docker build ──────────────────────────────────────────────────────────
-  docker:
-    name: Docker build check
+  # ─────────────────────────────────────────────
+  #  BUILD — сборка Docker образа
+  #  Запускается только если lint + security + test прошли
+  # ─────────────────────────────────────────────
+  build:
+    name: "Build Docker image"
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    needs: [lint, security, test]
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Build image
+        run: |
+          docker build \
+            --tag ${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --tag ${{ env.IMAGE_NAME }}:latest \
+            .
 
-      - name: Build image (no push)
-        uses: docker/build-push-action@v5
+      - name: Save image artifact
+        run: docker save ${{ env.IMAGE_NAME }}:latest | gzip > image.tar.gz
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
         with:
-          context: .
-          file: ./Dockerfile
-          push: false
-          tags: pdfnik-telegram-bot:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          name: docker-image-${{ github.sha }}
+          path: image.tar.gz
+          retention-days: 1

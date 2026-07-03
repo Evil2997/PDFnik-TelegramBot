@@ -1,37 +1,171 @@
-repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.10
-    hooks:
-      - id: ruff
-        name: ruff lint
-        args: [--fix, --exit-non-zero-on-fix]
-      - id: ruff-format
-        name: ruff format
+# .pre-commit-config.yaml
+#
+# Стек: Python 3.13, uv, pydantic, FastAPI, Docker
+#
+# Установка:
+#   uv add --dev pre-commit
+#   uv run pre-commit install --hook-type pre-commit --hook-type pre-push
+#   detect-secrets scan > .secrets.baseline   # один раз, создать baseline
+#   uv run pre-commit run --all-files          # первый прогон на всём репо
+#
+# Обновить версии хуков:
+#   uv run pre-commit autoupdate
+#
+# ┌─────────────────────────────────────────────────────┐
+# │  pre-commit  → быстро, на каждом git commit         │
+# │  pre-push    → тяжелее, только перед git push       │
+# └─────────────────────────────────────────────────────┘
 
+default_install_hook_types: [pre-commit, pre-push]
+
+repos:
+
+  # ════════════════════════════════════════════════
+  #  [pre-commit] БАЗОВЫЕ ПРОВЕРКИ ФАЙЛОВ
+  # ════════════════════════════════════════════════
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
+      - id: check-json
       - id: check-yaml
+        args: [--allow-multiple-documents]
       - id: check-toml
       - id: check-merge-conflict
-      - id: debug-statements
+      - id: check-case-conflict
+      - id: check-symlinks
       - id: check-added-large-files
         args: [--maxkb=1024]
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: debug-statements
 
-  - repo: local
+  # ════════════════════════════════════════════════
+  #  [pre-commit] PYTHON — RUFF
+  #  Быстро (миллисекунды) — на каждом коммите
+  # ════════════════════════════════════════════════
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.9
     hooks:
-      - id: mypy
-        name: mypy
-        entry: uv run mypy .
-        language: system
-        types: [python]
-        pass_filenames: false
+      - id: ruff
+        args: [--fix]
+        stages: [pre-commit]
+      - id: ruff-format
+        stages: [pre-commit]
 
+  # ════════════════════════════════════════════════
+  #  [pre-commit] PYTHON — BANDIT
+  #  Статический анализ кода на уязвимости
+  #  Только MEDIUM+ severity
+  # ════════════════════════════════════════════════
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.9
+    hooks:
+      - id: bandit
+        stages: [pre-commit]
+        args:
+          - --recursive
+          - --severity-level=medium
+          - --confidence-level=medium
+          - -x=tests
+        exclude: ^tests/
+
+  # ════════════════════════════════════════════════
+  #  [pre-commit] SECURITY — DETECT-SECRETS
+  # ════════════════════════════════════════════════
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
     hooks:
       - id: detect-secrets
+        stages: [pre-commit]
         args: [--baseline, .secrets.baseline]
-        exclude: (tests/|\.example$|\.md$)
+        exclude: |
+          (?x)^(
+            tests/.*|
+            .*\.example|
+            .*\.sample|
+            docs/.*
+          )$
+
+  # ════════════════════════════════════════════════
+  #  [pre-commit] DOCKER — HADOLINT
+  # ════════════════════════════════════════════════
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        stages: [pre-commit]
+        args:
+          - --ignore=DL3008
+          - --ignore=DL3009
+          - --failure-threshold=warning
+
+  # ════════════════════════════════════════════════
+  #  [pre-commit] GITHUB ACTIONS — ACTIONLINT
+  # ════════════════════════════════════════════════
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.1
+    hooks:
+      - id: actionlint
+        stages: [pre-commit]
+
+  # ════════════════════════════════════════════════
+  #  [pre-push] PYTHON — MYPY
+  #  Медленный — только перед push
+  # ════════════════════════════════════════════════
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        stages: [pre-push]
+        additional_dependencies:
+          - pydantic>=2.0
+          - types-redis
+          - types-requests
+          - fastapi
+          - aio-pika
+        args:
+          - --strict
+          - --ignore-missing-imports
+        exclude: ^(tests/|migrations/|alembic/)
+
+  # ════════════════════════════════════════════════
+  #  [pre-push] TRIVY — CVE сканирование
+  #  Только перед push, только если изменились
+  #  файлы зависимостей или Dockerfile
+  #
+  #  Логика в scripts/trivy_check.sh:
+  #    CVE-2020 и старше → ALL severity
+  #    CVE-2021 и новее  → только MEDIUM+
+  #
+  #  Требует: trivy + jq в системе
+  # ════════════════════════════════════════════════
+  - repo: local
+    hooks:
+      - id: trivy-smart
+        name: trivy (CVE year-based severity filter)
+        entry: bash scripts/trivy_check.sh fs .
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        types: []
+        files: ^(pyproject\.toml|uv\.lock|requirements.*\.txt|Dockerfile.*)$
+
+
+# ════════════════════════════════════════════════
+#  ГЛОБАЛЬНЫЕ НАСТРОЙКИ
+# ════════════════════════════════════════════════
+default_language_version:
+  python: python3.13
+
+exclude: |
+  (?x)^(
+    \.venv/.*|
+    \.git/.*|
+    __pycache__/.*|
+    .*\.pyc|
+    uv\.lock|
+    .*_pb2\.py|
+    migrations/.*
+  )$
