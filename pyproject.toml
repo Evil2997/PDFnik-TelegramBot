@@ -6,8 +6,8 @@ requires-python = ">=3.13"
 
 dependencies = [
     "aiogram==3.29.1",
-    "faststream[rabbit]==0.6.3",
-    "faststream[redis]==0.6.3",
+    "faststream[rabbit]==0.6.7",
+    "faststream[redis]==0.6.7",
     "pydantic==2.11.10",
     "pydantic-settings==2.11.0",
     "pdfnik-schemes @ git+https://github.com/Evil2997/PDFnik-Schemes@v1.2.1",
