@@ -5,7 +5,7 @@ description = "Telegram bot frontend for PDFnik ecosystem"
 requires-python = ">=3.13"
 
 dependencies = [
-    "aiogram==3.23.0",
+    "aiogram==3.29.1",
     "faststream[rabbit]==0.6.3",
     "faststream[redis]==0.6.3",
     "pydantic==2.11.10",
