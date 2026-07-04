@@ -13,6 +13,8 @@ Usage:
     register_close_handler(dp, bot)                                # once, at setup
 """
 
+from collections.abc import Awaitable, Callable
+
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -20,6 +22,21 @@ from main_app.core.logger import logger
 
 CLOSE_CALLBACK_DATA = "action:close"
 CLOSE_BUTTON_TEXT = "✖ Close"
+
+CloseCleanup = Callable[[], Awaitable[None]]
+
+# Optional per-message cleanup hooks, keyed by (chat_id, message_id).
+# A feature that sends a closeable message with attached state (timers,
+# Redis entries) registers a hook here; the close handler runs it once.
+_close_cleanups: dict[tuple[int, int], CloseCleanup] = {}
+
+
+def register_close_cleanup(chat_id: int, message_id: int, cleanup: CloseCleanup) -> None:
+    _close_cleanups[(chat_id, message_id)] = cleanup
+
+
+def pop_close_cleanup(chat_id: int, message_id: int) -> CloseCleanup | None:
+    return _close_cleanups.pop((chat_id, message_id), None)
 
 
 def close_button() -> InlineKeyboardButton:
@@ -50,6 +67,20 @@ def register_close_handler(dp: Dispatcher, bot: Bot) -> None:
         if message is None:
             await callback.answer()
             return
+
+        # Pressing close expresses dismissal regardless of whether the
+        # deletion below succeeds, so run the cleanup hook first.
+        cleanup = pop_close_cleanup(message.chat.id, message.message_id)
+        if cleanup is not None:
+            try:
+                await cleanup()
+            except Exception as exc:
+                logger.exception(
+                    "event=close_cleanup_failed chat_id=%s message_id=%s err=%s",
+                    message.chat.id,
+                    message.message_id,
+                    exc,
+                )
 
         # chat/message_id are present on both Message and InaccessibleMessage,
         # so deleting via the bot API works even for messages aiogram cannot

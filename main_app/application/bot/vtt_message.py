@@ -13,6 +13,7 @@ from faststream.redis import Redis
 
 from main_app.application.bot.playlist_mode import (
     make_mode_keyboard,
+    schedule_auto_mode,
     store_pending_playlist,
 )
 from main_app.application.bot.vtt_contracts import (
@@ -305,7 +306,17 @@ def register_vtt_message_handlers(
         if _is_playlist_url(url):
             await store_pending_playlist(redis, chat_id, reply_to_message_id, url)
             keyboard = make_mode_keyboard(reply_to_message_id)
-            await msg.answer("Playlist detected. Choose extraction mode:", reply_markup=keyboard)
+            prompt = await msg.answer(
+                "Playlist detected. Choose extraction mode:", reply_markup=keyboard
+            )
+            schedule_auto_mode(
+                bot,
+                broker,
+                redis,
+                chat_id=chat_id,
+                orig_msg_id=reply_to_message_id,
+                prompt_message_id=prompt.message_id,
+            )
             return
 
         job_id = str(uuid.uuid4())

@@ -17,6 +17,8 @@ from main_app.application.bot.closeable import (
     CLOSE_CALLBACK_DATA,
     close_button,
     close_keyboard,
+    pop_close_cleanup,
+    register_close_cleanup,
     register_close_handler,
     with_close_button,
 )
@@ -148,3 +150,62 @@ class TestCloseHandler:
         callback.answer.assert_awaited_once()
         # The failure ack carries an explanatory text
         assert callback.answer.call_args[0]
+
+
+# ---------------------------------------------------------------------------
+# Close cleanup hooks
+# ---------------------------------------------------------------------------
+
+
+class TestCloseCleanup:
+    def test_register_and_pop(self):
+        cleanup = AsyncMock()
+        register_close_cleanup(5, 6, cleanup)
+        assert pop_close_cleanup(5, 6) is cleanup
+        # popped once - gone
+        assert pop_close_cleanup(5, 6) is None
+
+    def test_pop_unknown_returns_none(self):
+        assert pop_close_cleanup(998, 999) is None
+
+    async def test_handler_runs_cleanup_once(self):
+        bot = MagicMock()
+        bot.delete_message = AsyncMock()
+        handler = _capture_close_handler(bot)
+
+        cleanup = AsyncMock()
+        callback = _make_callback(chat_id=5, message_id=6)
+        register_close_cleanup(5, 6, cleanup)
+
+        await handler(callback)
+        cleanup.assert_awaited_once()
+
+        # second close of the same message does not re-run the hook
+        await handler(callback)
+        cleanup.assert_awaited_once()
+
+    async def test_cleanup_runs_even_if_delete_fails(self):
+        bot = MagicMock()
+        bot.delete_message = AsyncMock(side_effect=RuntimeError("too old"))
+        handler = _capture_close_handler(bot)
+
+        cleanup = AsyncMock()
+        callback = _make_callback(chat_id=5, message_id=6)
+        register_close_cleanup(5, 6, cleanup)
+
+        await handler(callback)
+        cleanup.assert_awaited_once()
+
+    async def test_cleanup_failure_does_not_break_close(self):
+        bot = MagicMock()
+        bot.delete_message = AsyncMock()
+        handler = _capture_close_handler(bot)
+
+        cleanup = AsyncMock(side_effect=RuntimeError("boom"))
+        callback = _make_callback(chat_id=5, message_id=6)
+        register_close_cleanup(5, 6, cleanup)
+
+        await handler(callback)
+
+        bot.delete_message.assert_awaited_once()
+        callback.answer.assert_awaited_once()
