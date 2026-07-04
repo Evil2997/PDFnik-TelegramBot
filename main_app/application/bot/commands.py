@@ -7,6 +7,7 @@ from aiogram import Dispatcher
 from aiogram.filters import Command
 from aiogram.types import Message
 
+from main_app.application.bot.closeable import close_keyboard
 from main_app.application.bot.commands_text import (
     CANCEL_CONFIRM_TEXT,
     CANCEL_CONFIRMED_TEXT,
@@ -57,12 +58,12 @@ def register_command_handlers(dp: Dispatcher) -> None:
     @dp.message(Command("start"))
     async def command_start(msg: Message) -> None:
         logger.info("/start from chat %s", msg.chat.id)
-        await msg.answer(START_TEXT)
+        await msg.answer(START_TEXT, reply_markup=close_keyboard())
 
     @dp.message(Command("help"))
     async def command_help(msg: Message) -> None:
         logger.info("/help from chat %s", msg.chat.id)
-        await msg.answer(HELP_TEXT)
+        await msg.answer(HELP_TEXT, reply_markup=close_keyboard())
 
     @dp.message(Command("done"))
     async def command_done(msg: Message) -> None:

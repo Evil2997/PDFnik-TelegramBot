@@ -1,3 +1,4 @@
+from main_app.application.bot.closeable import register_close_handler
 from main_app.application.bot.commands import register_command_handlers
 from main_app.application.bot.pdf_consumer import register_pdf_send_consumer
 from main_app.application.bot.playlist_mode import register_playlist_mode_handlers
@@ -13,6 +14,9 @@ from main_app.infrastructure.storage import storage
 def setup_bot_handlers_and_subscribers() -> None:
     # commands first
     register_command_handlers(dp)
+
+    # universal "close" button handler (any closeable inline message)
+    register_close_handler(dp, bot)
 
     # VTT ingress should be registered BEFORE generic text handler,
     # so YouTube links can be intercepted without breaking existing text/photo logic.

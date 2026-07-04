@@ -6,6 +6,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from faststream.rabbit import RabbitBroker
 from faststream.redis import Redis
 
+from main_app.application.bot.closeable import with_close_button
 from main_app.application.bot.vtt_contracts import (
     TxtDelivery,
     TxtReply,
@@ -60,7 +61,9 @@ def make_mode_keyboard(original_message_id: int) -> InlineKeyboardMarkup:
             row = []
     if row:
         rows.append(row)
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+    # Close row lets the user dismiss the prompt; the pending Redis entry
+    # simply expires via its TTL.
+    return with_close_button(InlineKeyboardMarkup(inline_keyboard=rows))
 
 
 def register_playlist_mode_handlers(
