@@ -25,3 +25,9 @@ __pycache__/**
 # Uploads
 uploads/
 uploads/**
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
+htmlcov/**
