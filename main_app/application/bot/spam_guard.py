@@ -43,10 +43,7 @@ def is_ignorable_message(message: Message) -> bool:
         return True
 
     content_type = getattr(message, "content_type", None)
-    if content_type in _IGNORABLE_CONTENT_TYPES:
-        return True
-
-    return False
+    return content_type in _IGNORABLE_CONTENT_TYPES
 
 
 class SpamGuard:
