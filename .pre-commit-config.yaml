@@ -24,7 +24,7 @@ repos:
   #  [pre-commit] БАЗОВЫЕ ПРОВЕРКИ ФАЙЛОВ
   # ════════════════════════════════════════════════
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: check-json
       - id: check-yaml
@@ -46,7 +46,7 @@ repos:
   #  Быстро (миллисекунды) — на каждом коммите
   # ════════════════════════════════════════════════
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.9
+    rev: v0.15.20
     hooks:
       - id: ruff
         args: [--fix]
@@ -60,7 +60,7 @@ repos:
   #  Только MEDIUM+ severity
   # ════════════════════════════════════════════════
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.9
+    rev: 1.9.4
     hooks:
       - id: bandit
         stages: [pre-commit]
@@ -92,7 +92,7 @@ repos:
   #  [pre-commit] DOCKER — HADOLINT
   # ════════════════════════════════════════════════
   - repo: https://github.com/hadolint/hadolint
-    rev: v2.12.0
+    rev: v2.14.0
     hooks:
       - id: hadolint-docker
         stages: [pre-commit]
@@ -105,7 +105,7 @@ repos:
   #  [pre-commit] GITHUB ACTIONS — ACTIONLINT
   # ════════════════════════════════════════════════
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.1
+    rev: v1.7.12
     hooks:
       - id: actionlint
         stages: [pre-commit]
@@ -115,7 +115,7 @@ repos:
   #  Медленный — только перед push
   # ════════════════════════════════════════════════
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+    rev: v2.1.0
     hooks:
       - id: mypy
         stages: [pre-push]
