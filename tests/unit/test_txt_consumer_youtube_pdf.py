@@ -237,9 +237,9 @@ class TestYoutubePdfLongTranscript:
         broker.publish = AsyncMock()
 
         long_text = _long_transcript()
-        assert not _should_send_as_short_message(
-            "youtube", long_text
-        ), "Precondition: transcript must be long"
+        assert not _should_send_as_short_message("youtube", long_text), (
+            "Precondition: transcript must be long"
+        )
 
         result = _make_success(source_type="youtube")
 
@@ -265,9 +265,9 @@ class TestYoutubePdfLongTranscript:
         broker.publish = AsyncMock()
 
         short_text = _short_transcript()
-        assert _should_send_as_short_message(
-            "youtube", short_text
-        ), "Precondition: transcript must be short"
+        assert _should_send_as_short_message("youtube", short_text), (
+            "Precondition: transcript must be short"
+        )
 
         result = _make_success(source_type="youtube")
 
