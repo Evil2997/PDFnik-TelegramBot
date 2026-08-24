@@ -66,6 +66,13 @@ _YOUTUBE_URL_RE = re.compile(
 
 _VTT_DEDUP_TTL_SEC = 300
 
+# getFile on the cloud Bot API refuses anything larger, so the download can
+# never succeed and retrying is pointless - say so instead of asking the user
+# to try again. Only a self-hosted Bot API server lifts this.
+# https://core.telegram.org/bots/api#getfile
+_TELEGRAM_MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
+_BYTES_PER_MB = 1024 * 1024
+
 
 def _safe_suffix(filename: str) -> str:
     suffix = pathlib.Path(filename).suffix
@@ -118,10 +125,25 @@ def _resolve_delivery_mode(source_type: str) -> DeliveryMode:
     return "text" if source_type == "voice" else "document"
 
 
+def _media_file(msg: Message) -> Voice | Audio | Video | Document | None:
+    return msg.voice or msg.audio or msg.video or msg.document
+
+
+def _oversized_file_bytes(msg: Message) -> int | None:
+    """Size of the attached media when Telegram will refuse to serve it, else None."""
+    file_obj = _media_file(msg)
+    if file_obj is None or file_obj.file_size is None:
+        return None
+    if file_obj.file_size <= _TELEGRAM_MAX_DOWNLOAD_BYTES:
+        return None
+    return file_obj.file_size
+
+
 async def _download_media_bytes(bot: Bot, msg: Message) -> bytes:
     buffer = BytesIO()
-    file_obj = msg.voice or msg.audio or msg.video or msg.document
-    assert file_obj is not None
+    file_obj = _media_file(msg)
+    if file_obj is None:
+        raise ValueError("message carries no downloadable media")
     await bot.download(file_obj, destination=buffer)
     return buffer.getvalue()
 
@@ -239,6 +261,24 @@ def register_vtt_message_handlers(
 
         source_type, filename, mime_type = _infer_upload_meta(msg)
         job_id = str(uuid.uuid4())
+
+        oversized_bytes = _oversized_file_bytes(msg)
+        if oversized_bytes is not None:
+            logger.info(
+                "event=vtt_file_too_big job_id=%s chat_id=%s source_type=%s "
+                "size_bytes=%s limit_bytes=%s",
+                job_id,
+                chat_id,
+                source_type,
+                oversized_bytes,
+                _TELEGRAM_MAX_DOWNLOAD_BYTES,
+            )
+            await msg.answer(
+                f"This file is {oversized_bytes / _BYTES_PER_MB:.1f} MB. Telegram does not let "
+                f"bots download anything over {_TELEGRAM_MAX_DOWNLOAD_BYTES // _BYTES_PER_MB} MB, "
+                f"so it cannot be transcribed. Please send it in shorter parts."
+            )
+            return
 
         try:
             file_bytes = await _download_media_bytes(bot, msg)
