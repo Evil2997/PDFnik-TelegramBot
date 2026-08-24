@@ -44,7 +44,7 @@ multidict==6.7.1
     #   yarl
 pamqp==3.3.0
     # via aiormq
-pdfnik-schemes @ git+https://github.com/Evil2997/PDFnik-Schemes@cc9b77106690548a325f0ca408b749b39e6b5990
+pdfnik-schemes @ git+https://github.com/Evil2997/PDFnik-Schemes@b5be7bd253ed2cb804576feb7a3fdacca605a267
     # via pdfnik-telegram-bot (pyproject.toml)
 propcache==0.5.2
     # via
